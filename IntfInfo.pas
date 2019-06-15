@@ -111,7 +111,7 @@ const
 
 implementation
 
-uses SOAPConst;
+uses RESTJSONConst;
 
 const
   CCMap:  array[0..4] of TCallConv = (ccReg, ccCdecl, ccPascal, ccStdCall, ccSafeCall);

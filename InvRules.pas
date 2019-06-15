@@ -33,19 +33,6 @@ begin
 
   if ParamInfo.Kind = tkString then
     Result := True;
-//  if ParamInfo.Kind = tkDynArray then
-//    Result := True;
-
-
- // if (ParamInfo.Kind = tkVariant) and (pfReference in Flags) then
-  //  Result := True;
- { case ParamInfo.Kind of
-    tkWString,
-    tkString,
-    tkLString,
-    tkDynArray:
-      Result := True;
-  end;  }
 end;
 
 

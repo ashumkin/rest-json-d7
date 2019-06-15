@@ -28,7 +28,7 @@ unit InvokeRegistry;
 interface
 
 uses SysUtils, TypInfo, IntfInfo, Classes, Contnrs, {$IFDEF MSWINDOWS}Windows{$ENDIF}
-  {$IFDEF LINUX}Libc{$ENDIF}, XMLSchema, XmlIntf, Types;
+  {$IFDEF LINUX}Libc{$ENDIF}, Types, superobject;
 
 type
 
@@ -41,16 +41,12 @@ type
                           ocoDontPutTypeAttr);
   TObjectConvertOptions= set of ObjectConvertOptions;
 
-  TSOAPAttachment = class;
-
   IObjConverter = interface
   ['{7F67EA52-A3D1-429B-B54D-49F692B6131A}']
-    function  ObjInstanceToSOAP(Instance: TObject; RootNode, ParentNode: IXMLNode;
-                                const NodeName, NodeNamespace: InvString; ObjConvOpts: TObjectConvertOptions;
-                                out RefID: InvString): IXMLNode;
-    procedure InitObjectFromSOAP(Instance: TObject; RootNode, Node: IXMLNode);
-    procedure AddAttachment(Attachment: TSOAPAttachment; const AContentId: string);
-    function  FindAttachment(const AContentId: string): TSOAPAttachment;
+    function  ObjInstanceToSOAP(Instance: TObject; RootNode: ISuperObject;
+                                const NodeName: InvString; ObjConvOpts: TObjectConvertOptions;
+                                out RefID: InvString): ISuperObject;
+    procedure InitObjectFromSOAP(Instance: TObject; RootNode: ISuperObject);
   end;
 
   { ======================================================================================
@@ -75,10 +71,10 @@ type
     don't need to resort to any of these flags since all of a server's needs can be
     mapped to SOAP without use of holder classes.
     ====================================================================================== }
-  SerializationOptions  = (xoHolderClass, xoAttributeOnLastMember, xoInlineArrays, xoLiteralParam,
+  SerializationOptions  = ((*xoHolderClass, xoAttributeOnLastMember, *)xoInlineArrays(*, xoLiteralParam,
                            xoSimpleTypeWrapper, xoOption6, xoOption7, xoOption8, xoOption9, xoOptionA,
                            xoOptionB, xoOptionC, xoOptionD, xoOptionE, xoOptionF, xoOptionG,
-                           xoOptionH, xoOptionI);
+                           xoOptionH, xoOptionI*));
   TSerializationOptions = set of SerializationOptions;
 
   { TRemotable is the base class for remoting complex types - it introduces a virtual
@@ -97,11 +93,11 @@ type
     destructor  Destroy; override;
 
     { Serialization routines }
-    function   ObjectToSOAP(RootNode, ParentNode: IXMLNode;
+    function   ObjectToSOAP(RootNode: ISuperObject;
                             const ObjConverter: IObjConverter;
-                            const Name, URI: InvString; ObjConvOpts: TObjectConvertOptions;
-                            out RefID: InvString): IXMLNode; virtual;
-    procedure  SOAPToObject(const RootNode, Node: IXMLNode; const ObjConverter: IObjConverter); virtual;
+                            const Name: InvString; ObjConvOpts: TObjectConvertOptions;
+                            out RefID: InvString): ISuperObject; virtual;
+    procedure  SOAPToObject(const RootNode: ISuperObject; const ObjConverter: IObjConverter); virtual;
 
     property   DataContext: TDataContext read FDataContext write SetDataContext;
     property   SerializationOptions: TSerializationOptions read FSerializationOptions;
@@ -114,35 +110,32 @@ type
   public
     function  NativeToXS: WideString; virtual; abstract;
     procedure XSToNative(Data: WideString); virtual; abstract;
-    function  ObjectToSOAP(RootNode, ParentNode: IXMLNode;
+    function  ObjectToSOAP(RootNode: ISuperObject;
                            const ObjConverter: IObjConverter;
-                           const Name, URI: InvString; ObjConvOpts: TObjectConvertOptions;
-                           out RefID: InvString): IXMLNode; override;
-    procedure SOAPToObject(const RootNode, Node: IXMLNode; const ObjConverter: IObjConverter); override;
+                           const Name: InvString; ObjConvOpts: TObjectConvertOptions;
+                           out RefID: InvString): ISuperObject; override;
+    procedure SOAPToObject(const RootNode: ISuperObject; const ObjConverter: IObjConverter); override;
   end;
 
   PTRemotable = ^TRemotable;
   TRemotableClass = class of TRemotable;
   TRemotableXSClass = class of TRemotableXS;
 
-  { TSOAPHeader is the base class for SOAP Headers - it introduces the ability to
+  { TJSONHeader is the base class for SOAP Headers - it introduces the ability to
     handle Header-specific attributes such as 'Must-Understand' and 'Actor' }
-  TSOAPHeader = class(TRemotable)
+  TJSONHeader = class(TRemotable)
   private
     FMustUnderstand: Boolean;
-    FActor: WideString;
   public
     { Serialization routines }
-    function   ObjectToSOAP(RootNode, ParentNode: IXMLNode;
+    function   ObjectToSOAP(RootNode: ISuperObject;
                             const ObjConverter: IObjConverter;
-                            const Name, URI: InvString; ObjConvOpts: TObjectConvertOptions;
-                            out RefID: InvString): IXMLNode; override;
-    procedure  SOAPToObject(const RootNode, Node: IXMLNode; const ObjConverter: IObjConverter); override;
+                            const Name: InvString; ObjConvOpts: TObjectConvertOptions;
+                            out RefID: InvString): ISuperObject; override;
 
     property MustUnderstand: Boolean read FMustUnderstand write FMustUnderstand;
-    property Actor: WideString read FActor write FActor;
   end;
-  TSOAPHeaderClass = class of TSOAPHeader;
+  TJSONHeaderClass = class of TJSONHeader;
 
 {$M+}
   { ERemotableException is the base class for handling fault packets with
@@ -193,11 +186,7 @@ type
                    AEncoding: WideString);
 
     { Serialization routines - Handle MIME Part I/O }
-    function   ObjectToSOAP(RootNode, ParentNode: IXMLNode;
-                            const ObjConverter: IObjConverter;
-                            const Name, URI: InvString; ObjConvOpts: TObjectConvertOptions;
-                            out RefID: InvString): IXMLNode; override;
-    procedure  SOAPToObject(const RootNode, Node: IXMLNode; const ObjConverter: IObjConverter); override;
+    procedure  SOAPToObject(const RootNode: ISuperObject; const ObjConverter: IObjConverter); override;
 
     property CacheFile: string read FCacheFile;
     property CacheFilePersist: Boolean read FCacheFilePersist write FCacheFilePersist default False;
@@ -228,7 +217,7 @@ type
     constructor Create;
     destructor  Destroy; override;
 
-    procedure Add(Header: TSOAPHeader); overload;
+    procedure Add(Header: TJSONHeader); overload;
     procedure Add(Header: TObject); overload;
     procedure Clear;
     function  Extract(Obj: TObject): TObject;
@@ -238,7 +227,7 @@ type
     property  Headers[Index: Integer]: TObject read GetHeader; default;
   end;
 
-  { Internal interface used by framework to allow ISOAPHeaders to work
+  { Internal interface used by framework to allow IJSONHeaders to work
     on either Client/RIO or Server/Invoker Headers }
   IHeadersSetter = interface
   ['{FC96447A-94AC-4C88-B724-192284E2DA34}']
@@ -247,20 +236,20 @@ type
 
   { Client and Server side interface to send and process headers
     received }
-  ISOAPHeaders = interface
+  IJSONHeaders = interface
   ['{E240BE0C-256F-D611-96FA-00C04FA06B45}']
     { Send this header to Service or send this header back to a Client }
-    procedure Send(const Hdr: TSOAPHeader);
+    procedure Send(const Hdr: TJSONHeader);
 
     { Query list of headers to be sent }
     function  SendCount: Integer;
-    function  SendAt(Index: Integer): TSOAPHeader;
+    function  SendAt(Index: Integer): TJSONHeader;
 
     { Retrieve a header sent by a a Client or returned by a Service }
     { NOTE: You have ownership of the header once you retrieve it   }
-    procedure Get(Cls: TClass; out Hdr: TSOAPHeader); overload;
-    function  Get(Cls: TClass): TSOAPHeader; overload;
-    function  Get(const Name, URI: WideString): TSOAPHeader; overload;
+    procedure Get(Cls: TClass; out Hdr: TJSONHeader); overload;
+    function  Get(Cls: TClass): TJSONHeader; overload;
+    function  Get(const Name: WideString): TJSONHeader; overload;
 
     { Outbound header ownership - NOTE: We always own inbound ones until
       you retrieve them; also, ownership on the Server side is handled
@@ -271,26 +260,26 @@ type
     property OwnsSentHeaders: Boolean read GetOwnsSentHeaders write SetOwnsSentHeaders;
   end;
 
-  TSOAPHeadersBase = class(TContainedObject, IHeadersSetter)
+  TJSONHeadersBase = class(TContainedObject, IHeadersSetter)
   protected
     FHeadersInbound: THeaderList;
     FHeadersOutBound: THeaderList;
     procedure SetHeadersInOut(var InHdrs, OutHdrs: THeaderList);
   end;
 
-  TSOAPHeaders = class(TSOAPHeadersBase, ISOAPHeaders, IHeadersSetter)
+  TJSONHeaders = class(TJSONHeadersBase, IJSONHeaders, IHeadersSetter)
   public
-    procedure Send(const Hdr: TSOAPHeader);
+    procedure Send(const Hdr: TJSONHeader);
 
     { Query list of headers to be sent }
     function  SendCount: Integer;
-    function  SendAt(Index: Integer): TSOAPHeader;
+    function  SendAt(Index: Integer): TJSONHeader;
 
     { Retrieve a header sent by a a Client or returned by a Service }
     { NOTE: You have ownership of the header once you retrieve it   }
-    procedure Get(Cls: TClass; out Hdr: TSOAPHeader); overload;
-    function  Get(Cls: TClass): TSOAPHeader; overload;
-    function  Get(const Name, URI: WideString): TSOAPHeader; overload;
+    procedure Get(Cls: TClass; out Hdr: TJSONHeader); overload;
+    function  Get(Cls: TClass): TJSONHeader; overload;
+    function  Get(const Name: WideString): TJSONHeader; overload;
 
     function  GetOwnsSentHeaders: Boolean;
     procedure SetOwnsSentHeaders(Flag: Boolean);
@@ -298,7 +287,7 @@ type
 
   TInvokableClass = class(TObject, IInterface)
   protected
-    FSOAPHeaders: TSOAPHeaders;
+    FJSONHeaders: TJSONHeaders;
     FRefCount: Integer;
     function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
     function _AddRef: Integer; stdcall;
@@ -363,15 +352,9 @@ type
 
   { Options that control invocation & specify items found when
     a porttype was imported }
-  TIntfInvokeOption = (ioDefault,               { Nothing special }
-                       ioDocument,              { We're passing documents - don't use Sect-5 Encoding }
-                       ioLiteral,               { We have literal params - skip method node }
-                       ioHasDefaultSOAPAction,  { We have a default SOAP Action }
-                       ioHasReturnParamNames,   { We have specific return parameter names }
-                       ioHasNamespace,          { We have a namespace }
-                       ioIsAppServerSOAP,       { The interface derives from IAppServerSOAP }
-                       ioHasUDDIInfo,           { We have UDDI info, for fail-over lookup }
-                       ioHasAllSOAPActions      { Have all operation SOAPActions }
+  TIntfInvokeOption = (ioDefault,              { Nothing special }
+                       ioPretty,                { Pretty JSON }
+                       ioHasReturnParamNames
                       );
   TIntfInvokeOptions= set of TIntfInvokeOption;
 
@@ -382,7 +365,6 @@ type
     GUID: TGUID;                              { GUID of interface           }
     Info: PTypeInfo;                          { Typeinfo of interface       }
     DefImpl: TClass;                          { Metaclass of implementation }
-    Namespace: Widestring;                    { XML Namespace of type       }
     WSDLEncoding: WideString;                 { Encoding                    }
     Documentation: string;                    { Description of interface    }
     SOAPAction: string;                       { SOAPAction of interface     }
@@ -409,7 +391,6 @@ type
               MethodType: eHeaderMethodType = hmtAll; Required: Boolean = False);
     procedure InternalRegisterException(Info: PTypeInfo; AClass: TClass; const MethodName: string);
     function  InternalGetHeaderName(const Item: IntfHeaderItem): WideString;
-    function  InternalGetHeaderNamespace(const Item: IntfHeaderItem): WideString;
   public
     constructor Create;
     destructor Destroy; override;
@@ -444,8 +425,6 @@ type
     function GetRequestHeaderInfoForInterface(Info: PTypeInfo): THeaderItemArray;
     function GetResponseHeaderInfoForInterface(Info: PTypeInfo): THeaderItemArray;
     function GetHeaderName(Info: PTypeInfo; AClass: TClass): WideString;
-    function GetHeaderNamespace(Info: PTypeInfo; AClass: TClass): WideString; overload;
-    function GetHeaderNamespace(AClass: TClass): WideString; overload;
     function GetHeaderClass(Name, Namespace: WideString): TClass;
 
     { Exception Class registration }
@@ -466,11 +445,6 @@ type
     function  GetActionURIOfInfo(const IntfInfo: PTypeInfo; const MethodName: WideString; MethodIndex: Integer): string;
     function  GetActionURIOfIID(const AGUID: TGUID): string;
 
-    { UDDI - related API }
-    procedure RegisterUDDIInfo(Info: PTypeInfo; const Operator: String; const BindingKey: string);
-    function  GetUDDIInfo(const IntfInfo: PTypeInfo; var Operator, BindingKey: string): Boolean; overload;
-    function  GetUDDIInfo(const AGUID: TGUID; var Operator, BindingKey: string): Boolean; overload;
-
     procedure RegisterReturnParamNames(Info: PTypeInfo; const RetParamNames: string);
     function  GetReturnParamNames(const IntfInfo: PTypeInfo): string;
 
@@ -482,7 +456,6 @@ type
     procedure UnLock; virtual;
     function  GetIntfIndex(const IntfInfo: PTypeInfo): Integer;
   public
-    function  GetNamespaceByGUID(const AGUID: TGUID): string;
     function  GetInfoForURI(const PathURI, ActionURI: string; var ACLass : TClass;  var IntfInfo: PTypeInfo; var AMeth: string): Boolean;
     function  GetIntfInvokeOptions(const IntfInfo: PTypeInfo): TIntfInvokeOptions; overload;
     function  GetIntfInvokeOptions(const AGUID: TGUID): TIntfInvokeOptions; overload;
@@ -514,15 +487,12 @@ type
     URI: WideString;
   end;
 
-  TObjMultiOptions = (ocDefault, ocMultiRef, ocNoMultiRef);
   TRemRegEntry = record
     ClassType: TClass;
     Info: PTypeInfo;
-    URI: WideString;
     Name: WideString;
     ExtName: WideString;
     IsScalar: Boolean;
-    MultiRefOpt: TObjMultiOptions;
     SerializationOpt: TSerializationOptions;
     PropNameMap: array of ExtNameMapItem;             { Renamed properties }
   end;
@@ -539,7 +509,7 @@ type
     function  GetEntry(Info: PTypeInfo; var Found: Boolean; const Name: WideString=''): Integer;
     function  FindEntry(Info: PTypeInfo; var Found: Boolean; const Name: WideString=''): Integer;
     procedure DeleteEntryFromURIMap(Info: PTypeInfo);
-    function  GetSimpleBuiltInXSDType(const URI, TypeName: WideString): PTypeInfo;
+    function  GetSimpleBuiltInXSDType(const TypeName: WideString): PTypeInfo;
     function  GetRegisteredClassForBuiltInXSD(const TypeName: WideString): TClass;
   protected
     procedure Lock; virtual;
@@ -549,27 +519,25 @@ type
     destructor Destroy; override;
 
     { Remotable class registration }
-    procedure RegisterXSClass(AClass: TClass; const URI: WideString = ''; const Name: WideString = '';
-                              const ExtName: WideString= ''; IsScalar: Boolean = False;
-                              MultiRefOpt: TObjMultiOptions = ocDefault);
+    procedure RegisterXSClass(AClass: TClass; const Name: WideString = '';
+                              const ExtName: WideString= ''; IsScalar: Boolean = False);
     { TypeInfo registration }
-    procedure RegisterXSInfo(Info: PTypeInfo; const URI: WideString = ''; const Name: WideString = ''; const ExtName: WideString = '');
+    procedure RegisterXSInfo(Info: PTypeInfo; const Name: WideString = ''; const ExtName: WideString = '');
 
     { TypeInfo registration via a Holder class }
-    procedure RegisterHolderClsMember(ClsTypeInfo: PTypeInfo; const URI: WideString = ''; const Name: WideString = ''; const ExtName: WideString = '');
+    procedure RegisterHolderClsMember(ClsTypeInfo: PTypeInfo; const Name: WideString = ''; const ExtName: WideString = '');
 
     { Query routines to conver Native Type to XML name and namespace }
-    function  ClassToURI(AClass: TClass; var URI, Name: WideString; var IsScalar: Boolean; tryToRegister: Boolean = True): Boolean; overload;
-    function  ClassToURI(AClass: TClass; var URI, Name: WideString): Boolean; overload;
-    function  InfoToURI(Info: PTypeInfo; var URI, Name: WideString; var IsScalar: Boolean; tryToRegister: Boolean = True): Boolean;
-    function  TypeInfoToXSD(Info: PTypeInfo; var URI, TypeName: WideString): Boolean;
-    procedure GetXSDInfoForClass(Info: PTypeInfo; var URI, TypeName: WideString);
+    function  ClassToURI(AClass: TClass; var Name: WideString; var IsScalar: Boolean; tryToRegister: Boolean = True): Boolean; overload;
+    function  ClassToURI(AClass: TClass; var Name: WideString): Boolean; overload;
+    function  InfoToURI(Info: PTypeInfo; var Name: WideString; var IsScalar: Boolean; tryToRegister: Boolean = True): Boolean;
+    function  TypeInfoToXSD(Info: PTypeInfo; var TypeName: WideString): Boolean;
+    procedure GetXSDInfoForClass(Info: PTypeInfo; var TypeName: WideString);
 
     { Query routines to convert XML name/namespace to Native TypeInfo }
-    function  URIToClass(const URI, Name: WideString; var IsScalar: Boolean): TClass; overload;
-    function  URIToClass(const URI, Name: WideString): TClass; overload;
-    function  XSDToTypeInfo(const URI, TypeName: WideString): PTypeInfo;
-    function  URIToInfo(const URI, Name: WideString): PTypeInfo;
+    function  URIToClass(const Name: WideString; var IsScalar: Boolean): TClass; overload;
+    function  URIToClass(const Name: WideString): TClass; overload;
+    function  URIToInfo(const Name: WideString): PTypeInfo;
 
     { Query registry information }
     function  GetURICount: Integer;
@@ -578,11 +546,9 @@ type
 
     { Class options }
     function  IsClassScalar(AClass: TClass): Boolean;
-    function  ClassOptions(AClass: TClass): TObjMultiOptions;
 
     { Variant-related conversions }
     function  VariantToInfo(const V: Variant; TryAllSchema: Boolean): PTypeInfo;
-    function  GetVarTypeFromXSD(const URI, TypeName: InvString): TVarType;
 
     { Serialization options }
     procedure RegisterSerializeOptions(Info: PTypeInfo; SerialOpt: TSerializationOptions); overload;
@@ -665,16 +631,8 @@ function  RemTypeRegistry: TRemotableTypeRegistry;
 function  SubstituteStrings(const InputString: WideString;
                             const SubString: WideString;
                             const Replacement: WideString): WideString;
-var
-  AppNameSpacePrefix: string;
 
 const
-  XMLSchemaInstNamepspaces: array[0..2] of InvString =
-    (SXMLSchemaInstURI_1999, SXMLSchemaInstURI_2000_10, SXMLSchemaInstURI);
-
-  XMLSchemaNamepspaces: array[0..2] of InvString =
-    (SXMLSchemaURI_1999, SXMLSchemaURI_2000_10, SXMLSchemaURI_2001);
-
   XMLBase64Types: array[0..1] of InvString = ('base64Binary', 'bin.base64');
 
   { Use 'AS_ATTRIBUTE' for members TRemotable-derived classes that you want
@@ -696,7 +654,7 @@ const
 
 implementation
 
-uses Variants, InvRules, SOAPConst, XSBuiltIns, xmldom, OPToSOAPDomConv, HTTPUtil;
+uses Variants, InvRules, RESTJSONConst, XSBuiltIns, xmldom, OPToRESTJSONConv, HTTPUtil;
 
 var
   InvRegistryV: TInvokableClassRegistry;
@@ -979,18 +937,7 @@ begin
   Result := Item.Name;
   if Result = '' then
   begin
-    RemClassRegistry.ClassToURI(Item.ClassType, URI, Result);
-  end;
-end;
-
-function TInvokableClassRegistry.InternalGetHeaderNamespace(const Item: IntfHeaderItem): WideString;
-var
-  Name: WideString;
-begin
-  Result := Item.Namespace;
-  if Result = '' then
-  begin
-    RemClassRegistry.ClassToURI(Item.ClassType, Result, Name);
+    RemClassRegistry.ClassToURI(Item.ClassType, Result);
   end;
 end;
 
@@ -1018,50 +965,6 @@ begin
   end;
 end;
 
-function TInvokableClassRegistry.GetHeaderNamespace(Info: PTypeInfo; AClass: TClass): WideString;
-var
-  I, J: Integer;
-begin
-  Result := '';
-  Lock;
-  try
-    I := GetIntfIndex(Info);
-    if I >= 0 then
-    begin
-      for J := 0 to Length(FRegIntfs[I].IntfHeaders)-1 do
-      begin
-        if FRegIntfs[I].IntfHeaders[J].ClassType = AClass then
-        begin
-          Result := InternalGetHeaderNamespace(FRegIntfs[I].IntfHeaders[J]);
-          Exit;
-        end;
-      end;
-    end;
-  finally
-    Unlock;
-  end;
-end;
-
-function TInvokableClassRegistry.GetHeaderNamespace(AClass: TClass): WideString;
-var
-  I, J: Integer;
-  Name: WideString;
-begin
-  Result := '';
-  for I := 0 to Length(FRegIntfs)-1 do
-  begin
-    for J := 0 to Length(FRegIntfs[I].IntfHeaders)-1 do
-    begin
-      if FRegIntfs[I].IntfHeaders[J].ClassType = AClass then
-      begin
-        Result := InternalGetHeaderNamespace(FRegIntfs[I].IntfHeaders[J]);
-        Exit;
-      end;
-    end;
-  end;
-  RemClassRegistry.ClassToURI(AClass, Result, Name);
-end;
-
 function TInvokableClassRegistry.GetHeaderClass(Name, Namespace: WideString): TClass;
 var
   I, J: Integer;
@@ -1071,8 +974,7 @@ begin
   begin
     for J := 0 to Length(FRegIntfs[I].IntfHeaders)-1 do
     begin
-      if (InternalGetHeaderName(FRegIntfs[I].IntfHeaders[J]) = Name) and
-         (InternalGetHeaderNamespace(FRegIntfs[I].IntfHeaders[J]) = Namespace) then
+      if (InternalGetHeaderName(FRegIntfs[I].IntfHeaders[J]) = Name) then
       begin
         Result := FRegIntfs[I].IntfHeaders[J].ClassType;
         Exit;
@@ -1227,7 +1129,6 @@ var
   IntfMD: TIntfMetaData;
   I, J: Integer;
   Table: PInterfaceTable;
-  URIApp: string;
 begin
   Lock;
   try
@@ -1244,19 +1145,6 @@ begin
     FRegIntfs[Index].Documentation := Doc;
     FRegIntfs[Index].ExtName := ExtName;
     FRegIntfs[Index].WSDLEncoding := WSDLEncoding;
-
-    if AppNameSpacePrefix <> '' then
-      URIApp := AppNameSpacePrefix +  '-';
-
-    { Auto-generate a namespace from the filename in which the interface was declared and
-      the AppNameSpacePrefix }
-    if Namespace = '' then
-      FRegIntfs[Index].Namespace :=  'urn:' + URIApp + IntfMD.UnitName + '-' + IntfMD.Name
-    else
-    begin
-      FRegIntfs[Index].Namespace := Namespace;
-      FRegIntfs[Index].InvokeOptions := FRegIntfs[Index].InvokeOptions + [ioHasNamespace];
-    end;
 
     if FRegIntfs[Index].DefImpl = nil then
     begin
@@ -1294,7 +1182,7 @@ begin
     if I >= 0 then
     begin
       FRegIntfs[I].SOAPAction := DefSOAPAction;
-      FRegIntfs[I].InvokeOptions := FRegIntfs[I].InvokeOptions + [ioHasDefaultSOAPAction];
+//      FRegIntfs[I].InvokeOptions := FRegIntfs[I].InvokeOptions + [ioHasDefaultSOAPAction];
       Exit;
     end;
   finally
@@ -1312,26 +1200,7 @@ begin
     if I >= 0 then
     begin
       FRegIntfs[I].SOAPAction := AllSOAPActions;
-      FRegIntfs[I].InvokeOptions := FRegIntfs[I].InvokeOptions + [ioHasAllSOAPActions];
-      Exit;
-    end;
-  finally
-    Unlock;
-  end;
-end;
-
-procedure TInvokableClassRegistry.RegisterUDDIInfo(Info: PTypeInfo; const Operator: String; const BindingKey: string);
-var
-  I: Integer;
-begin
-  Lock;
-  try
-    I := GetIntfIndex(Info);
-    if I >= 0 then
-    begin
-      FRegIntfs[I].UDDIOperator := Operator;
-      FRegIntfs[I].UDDIBindingKey := BindingKey;
-      FRegIntfs[I].InvokeOptions := FRegIntfs[I].InvokeOptions + [ioHasUDDIInfo];
+//      FRegIntfs[I].InvokeOptions := FRegIntfs[I].InvokeOptions + [ioHasAllSOAPActions];
       Exit;
     end;
   finally
@@ -1701,27 +1570,19 @@ begin
       begin
         { NOTE: Method name is ignored when an explicit SOAPAction is set unless it
                 contains the Operation format specifier }
-        if (ioHasDefaultSOAPAction in FRegIntfs[I].InvokeOptions) then
-        begin
-          Result := FRegIntfs[I].SOAPAction;
-          if MethodName <> '' then
-            Result := SubstituteStrings(Result, SOperationNameSpecifier, MethodName);
-        end
-        else if (ioHasAllSOAPActions in FRegIntfs[I].InvokeOptions) then
-        begin
-          SOAPActions := StringToStringArray(FRegIntfs[I].SOAPAction, FRegIntfs[I].SOAPAction[1]);
-          if (MethodIndex >= 0) and (MethodIndex < Length(SOAPActions)) then
-            Result := SOAPActions[MethodIndex]
-          else
-            Result := '';
-        end else
+//        if (ioHasDefaultSOAPAction in FRegIntfs[I].InvokeOptions) then
+//        begin
+//          Result := FRegIntfs[I].SOAPAction;
+//          if MethodName <> '' then
+//            Result := SubstituteStrings(Result, SOperationNameSpecifier, MethodName);
+//        end else
         begin
           { NOTE: For backward compatibility reasons, we use the Namespace#MethodName
                   as the default SOAPAction. If you need to customize the SOAPAction,
                   or if you can't use that logic (like when more than one interface
                   uses the same namespace), use RegisterDefaultSOAPAction or
                   RegisterAllSOAPActions to specify another SOAPAction }
-          Result := FRegIntfs[I].Namespace + '#' + MethodName;
+//          Result := FRegIntfs[I].Namespace + '#' + MethodName;
         end;
         Exit;
       end;
@@ -1729,33 +1590,6 @@ begin
   finally
     UnLock;
   end;
-end;
-
-function TInvokableClassRegistry.GetUDDIInfo(const IntfInfo: PTypeInfo; var Operator, BindingKey: string): Boolean;
-var
-  I: Integer;
-begin
-  Result := False;
-  Lock;
-  try
-    I := GetIntfIndex(IntfInfo);
-    if I >= 0 then
-    begin
-      if (ioHasUDDIInfo in FRegIntfs[I].InvokeOptions) then
-      begin
-        Operator := FRegIntfs[I].UDDIOperator;
-        BindingKey := FRegIntfs[I].UDDIBindingKey;
-        Result := True;
-      end;	
-    end;
-  finally
-    Unlock;
-  end;
-end;
-
-function TInvokableClassRegistry.GetUDDIInfo(const AGUID: TGUID; var Operator, BindingKey: string): Boolean;
-begin
-  Result := GetUDDIInfo(GetInterfaceTypeInfo(AGUID), Operator, BindingKey);
 end;
 
 function TInvokableClassRegistry.GetReturnParamNames(const IntfInfo: PTypeInfo): string;
@@ -1801,10 +1635,10 @@ function TInvokableClassRegistry.GetInfoForURI(const PathURI, ActionURI: string;
     begin
       { If user specified a SOAPAction use that - otherwise default
         to how we generate SA from namespaces (i.e. GetActionURIOfInfo) }
-      if (ioHasDefaultSOAPAction in FRegIntfs[I].InvokeOptions) then
-        SAPrefix := FRegIntfs[I].SOAPAction
-      else
-        SAPrefix := FRegIntfs[I].Namespace;
+//      if (ioHasDefaultSOAPAction in FRegIntfs[I].InvokeOptions) then
+        SAPrefix := FRegIntfs[I].SOAPAction;
+//      else
+//        SAPrefix := FRegIntfs[I].Namespace;
       { If Default SOAPAction has #%operationName% }
       Delete(SAPrefix, Pos('#', SAPrefix), Length(SAPrefix));           { Do not localize }
 
@@ -1860,26 +1694,6 @@ begin
   end;
 end;
 
-function TInvokableClassRegistry.GetNamespaceByGUID(const AGUID: TGUID): string;
-var
-  I: Integer;
-begin
-  Result := '';
-  Lock;
-  try
-    for I := 0 to Length(FRegIntfs) - 1 do
-    begin
-      if IsEqualGUID(FRegIntfs[I].GUID, AGUID) then
-      begin
-        Result := FRegIntfs[I].Namespace;
-        break;
-      end;
-    end;
-  finally
-    UnLock;
-  end;
-end;
-
 function TInvokableClassRegistry.GetInvokableObjectFromClass(
   AClass: TClass): TObject;
 var
@@ -1923,39 +1737,39 @@ begin
   end;
 end;
 
-{ TSOAPHeadersBase }
+{ TJSONHeadersBase }
 
-procedure TSOAPHeadersBase.SetHeadersInOut(var InHdrs, OutHdrs: THeaderList);
+procedure TJSONHeadersBase.SetHeadersInOut(var InHdrs, OutHdrs: THeaderList);
 begin
   FHeadersInbound := InHdrs;
   FHeadersOutBound := OutHdrs;
 end;
 
-{ TSOAPHeaders }
+{ TJSONHeaders }
 
-procedure TSOAPHeaders.Send(const Hdr: TSOAPHeader);
+procedure TJSONHeaders.Send(const Hdr: TJSONHeader);
 begin
   { Don't duplicate headers }
   if FHeadersOutBound.IndexOf(Hdr) = -1 then
     FHeadersOutBound.Add(Hdr);
 end;
 
-function TSOAPHeaders.SendCount: Integer;
+function TJSONHeaders.SendCount: Integer;
 begin
   Result := FHeadersOutBound.Count;
 end;
 
-function TSOAPHeaders.SendAt(Index: Integer): TSOAPHeader;
+function TJSONHeaders.SendAt(Index: Integer): TJSONHeader;
 begin
-  Result := TSOAPHeader(FHeadersOutbound[Index]);
+  Result := TJSONHeader(FHeadersOutbound[Index]);
 end;
 
-procedure TSOAPHeaders.Get(Cls: TClass; out Hdr: TSOAPHeader);
+procedure TJSONHeaders.Get(Cls: TClass; out Hdr: TJSONHeader);
 begin
   Hdr := Get(Cls);
 end;
 
-function TSOAPHeaders.Get(Cls: TClass): TSOAPHeader;
+function TJSONHeaders.Get(Cls: TClass): TJSONHeader;
 var
   I: Integer;
 begin
@@ -1964,26 +1778,26 @@ begin
   begin
     if FHeadersInBound[I].InheritsFrom(Cls) then
     begin
-      Result := TSOAPHeader(FHeadersInBound.Extract(FHeadersInBound[I]));
+      Result := TJSONHeader(FHeadersInBound.Extract(FHeadersInBound[I]));
       Exit;
     end;
   end;
 end;
 
-function TSOAPHeaders.Get(const Name, URI: WideString): TSOAPHeader;
+function TJSONHeaders.Get(const Name: WideString): TJSONHeader;
 var
   Cls: TClass;
 begin
-  Cls := RemClassRegistry.URIToClass(URI, Name);
+  Cls := RemClassRegistry.URIToClass(Name);
   Result := Get(Cls);
 end;
 
-function TSOAPHeaders.GetOwnsSentHeaders: Boolean;
+function TJSONHeaders.GetOwnsSentHeaders: Boolean;
 begin
   Result := FHeadersOutBound.OwnsObjects;
 end;
 
-procedure TSOAPHeaders.SetOwnsSentHeaders(Flag: Boolean);
+procedure TJSONHeaders.SetOwnsSentHeaders(Flag: Boolean);
 begin
   FHeadersOutBound.OwnsObjects := Flag;
 end;
@@ -1993,7 +1807,7 @@ end;
 constructor TInvokableClass.Create;
 begin
   inherited Create;
-  FSOAPHeaders := TSOAPHeaders.Create(Self);
+  FJSONHeaders := TJSONHeaders.Create(Self);
 end;
 
 procedure TInvokableClass.AfterConstruction;
@@ -2018,9 +1832,9 @@ end;
 
 function TInvokableClass.QueryInterface(const IID: TGUID; out Obj): HResult;
 begin
-  if IsEqualGUID(ISOAPHeaders, IID) then
+  if IsEqualGUID(IJSONHeaders, IID) then
   begin
-    Result := FSOAPHeaders.QueryInterface(IID, Obj);
+    Result := FJSONHeaders.QueryInterface(IID, Obj);
     Exit
   end;
   if GetInterface(IID, Obj) then
@@ -2072,77 +1886,54 @@ begin
   FDataContext := Value;
 end;
 
-function TRemotable.ObjectToSOAP(RootNode, ParentNode: IXMLNode;
+function TRemotable.ObjectToSOAP(RootNode: ISuperObject;
                                  const ObjConverter: IObjConverter;
-                                 const Name, URI: InvString; ObjConvOpts: TObjectConvertOptions;
-                                 out RefID: InvString): IXMLNode;
+                                 const Name: InvString; ObjConvOpts: TObjectConvertOptions;
+                                 out RefID: InvString): ISuperObject;
 begin
-  Result := ObjConverter.ObjInstanceToSOAP(Self, RootNode, ParentNode, Name, URI,
+  Result := ObjConverter.ObjInstanceToSOAP(Self, RootNode, Name,
                                            ObjConvOpts, RefID);
 end;
 
-procedure TRemotable.SOAPToObject(const RootNode, Node: IXMLNode;
+procedure TRemotable.SOAPToObject(const RootNode: ISuperObject;
                                   const ObjConverter: IObjConverter);
 begin
-  ObjConverter.InitObjectFromSOAP(Self, RootNode, Node);
+  ObjConverter.InitObjectFromSOAP(Self, RootNode);
 end;
 
 { TRemotableXS }
 
-function TRemotableXS.ObjectToSOAP(RootNode, ParentNode: IXMLNode;
+function TRemotableXS.ObjectToSOAP(RootNode: ISuperObject;
                                    const ObjConverter: IObjConverter;
-                                   const Name, URI: InvString; ObjConvOpts: TObjectConvertOptions;
-                                   out RefID: InvString): IXMLNode;
+                                   const Name: InvString; ObjConvOpts: TObjectConvertOptions;
+                                   out RefID: InvString): ISuperObject;
 begin
   ObjConvOpts := ObjConvOpts + [ocoDontSerializeProps];
-  Result := inherited ObjectToSOAP(RootNode, ParentNode, ObjConverter, Name, URI, ObjConvOpts, RefID); ;
+  Result := inherited ObjectToSOAP(RootNode, ObjConverter, Name, ObjConvOpts, RefID); ;
   { NOTE: In the case where an object is Multiref'ed - currently disabled
           for Scalar types - check the node returned HREF vs ID }
-  Result.Text := NativeToXS;
+  Result := SO(NativeToXS);
 end;
 
-procedure TRemotableXS.SOAPToObject(const RootNode, Node: IXMLNode; const ObjConverter: IObjConverter);
+procedure TRemotableXS.SOAPToObject(const RootNode: ISuperObject; const ObjConverter: IObjConverter);
 begin
   inherited;
-  XSToNative(Node.Text);
+  XSToNative(RootNode.AsJSon);
 end;
 
-{ TSOAPHeader }
+{ TJSONHeader }
 
-function TSOAPHeader.ObjectToSOAP(RootNode, ParentNode: IXMLNode;
+function TJSONHeader.ObjectToSOAP(RootNode: ISuperObject;
                                   const ObjConverter: IObjConverter;
-                                  const Name, URI: InvString;
+                                  const Name: InvString;
                                   ObjConvOpts: TObjectConvertOptions;
-                                  out RefID: InvString): IXMLNode;
+                                  out RefID: InvString): ISuperObject;
 const
   BoolDigit: array[Boolean] of string = ('0', '1');
-var
-  NodeNamespace: WideString;
 begin
   ObjConvOpts := ObjConvOpts - [ocoDontPrefixNode];
-  NodeNamespace := InvRegistry.GetHeaderNamespace(Self.ClassType);
-  Result := ObjConverter.ObjInstanceToSOAP(Self, RootNode, ParentNode, Name, NodeNamespace,
+  Result := ObjConverter.ObjInstanceToSOAP(Self, RootNode, Name,
                                            ObjConvOpts, RefID);
-  if FMustUnderstand then
-    Result.SetAttributeNS(SHeaderMustUnderstand, SSoapNameSpace, BoolDigit[FMustUnderstand]);
-  if FActor <> '' then
-    Result.SetAttributeNS(SHeaderActor, SSoapNameSpace, FActor);
-end;
-
-procedure TSOAPHeader.SOAPToObject(const RootNode, Node: IXMLNode;
-                                  const ObjConverter: IObjConverter);
-var
-  AttrVal: WideString;
-begin
-  inherited SOAPToObject(RootNode, Node, ObjConverter);
-  if Node.HasAttribute(SHeaderMustUnderstand, SSoapNameSpace) then
-  begin
-    AttrVal := Node.GetAttributeNS(SHeaderMustUnderstand, SSoapNameSpace);
-    FMustUnderstand := SameText(AttrVal, '1') or  { Do not localize }
-                       SameText(AttrVal, 'true'); { Do not localize }
-  end;
-  if Node.HasAttribute(SHeaderActor, SSoapNameSpace) then
-    FActor := Node.GetAttributeNS(SHeaderActor, SSoapNameSpace);
 end;
 
 { THeaderList }
@@ -2152,7 +1943,7 @@ begin
   FObjectList.Add(Header);
 end;
 
-procedure THeaderList.Add(Header: TSOAPHeader);
+procedure THeaderList.Add(Header: TJSONHeader);
 begin
   FObjectList.Add(Header);
 end;
@@ -2370,51 +2161,14 @@ begin
   end;
 end;
 
-function TSOAPAttachment.ObjectToSOAP(RootNode, ParentNode: IXMLNode;
-  const ObjConverter: IObjConverter; const Name, URI: InvString;
-  ObjConvOpts: TObjectConvertOptions; out RefID: InvString): IXMLNode;
-var
-  GUID: TGUID;
-  GUIDString: string;
-begin
-  { For attachments, we skip the type and the published properties }
-  Result := inherited ObjectToSOAP(RootNode, ParentNode, ObjConverter, Name, URI,
-                                   ObjConvOpts + [ocoDontSerializeProps,ocoDontPutTypeAttr],
-                                   RefID);
-
-  CreateGuid(GUID);
-  GUIDString := GuidToString(GUID);
-  GUIDString := Copy(GuidString, 2, Length(GuidString) -2 );
-  ObjConverter.AddAttachment(Self, GuidString);
-  Result.Attributes[SXMLHREF] := SAttachmentIDPrefix + GuidString;
-end;
-
-procedure TSOAPAttachment.SOAPToObject(const RootNode, Node: IXMLNode;
+procedure TSOAPAttachment.SOAPToObject(const RootNode: ISuperObject;
   const ObjConverter: IObjConverter);
-var
-  AttachFound: TSOAPAttachment;
-  CId: string;
 begin
   inherited;
-  CId := '<' + Node.Attributes[SXMLHREF] + '>';
-  AttachFound := ObjConverter.FindAttachment(Cid);
-
-  {OPToSOAPDomConv use to always clear - should we clear if nothing's found?? }
+  {OPToRESTJSONConv use to always clear - should we clear if nothing's found?? }
   Headers.Clear;
   SetSourceFile('');
   SetSourceStream(nil);
-
-  if AttachFound <> nil then
-  begin
-    Init(AttachFound.CacheFile,
-         AttachFound.Headers,
-         AttachFound.ContentType,
-         AttachFound.Encoding);
-    { Transfer ownership }
-    AttachFound.Ownership := soReference;
-    { Make sure SOAP Runtime does not delete this object }
-    DataContext := Nil;
-  end;
 end;
 
 constructor TRemotableTypeRegistry.Create;
@@ -2467,27 +2221,19 @@ begin
   end;
 end;
 
-procedure TRemotableTypeRegistry.RegisterXSClass(AClass: TClass; const URI: WideString = '';
+procedure TRemotableTypeRegistry.RegisterXSClass(AClass: TClass;
                                                  const Name: WideString = '';
                                                  const ExtName: WideString = '';
-                                                 IsScalar: Boolean = False;
-                                                 MultiRefOpt: TObjMultiOptions = ocDefault);
+                                                 IsScalar: Boolean = False);
 var
   Index: Integer;
   Found: Boolean;
-  AppURI: WideString;
 begin
   Lock;
   try
     Index := GetEntry(AClass.ClassInfo, Found, Name);
     if not Found then
     begin
-      if AppNameSpacePrefix <> '' then
-        AppURI := AppNameSpacePrefix + '-';
-      if URI = '' then
-        URIMap[Index].URI := 'urn:' + AppURI + GetTypeData(AClass.ClassInfo).UnitName { do not localize }
-      else
-        URIMap[Index].URI := URI;
       if Name <> '' then
         URIMap[Index].Name := Name
       else
@@ -2498,14 +2244,13 @@ begin
       URIMap[Index].ClassType := AClass;
       URIMap[Index].Info := AClass.ClassInfo;
       URIMap[Index].IsScalar := IsScalar;
-      URIMap[Index].MultiRefOpt := MultiRefOpt;
     end;
   finally
     UnLock;
   end;
 end;
 
-procedure TRemotableTypeRegistry.RegisterXSInfo(Info: PTypeInfo; const URI: WideString = '';
+procedure TRemotableTypeRegistry.RegisterXSInfo(Info: PTypeInfo;
                                                 const Name: WideString = '';
                                                 const ExtName: WideString = '');
 var
@@ -2541,27 +2286,14 @@ begin
     Index := GetEntry(Info, Found, Name);
     if Found then
       Exit;
-    if AppNameSpacePrefix <> '' then
-      AppURI := AppNameSpacePrefix + '-';
-    if URI = '' then
+    if Info.Kind = tkDynArray then
     begin
-      if Info.Kind = tkDynArray then
-      begin
-        UnitName := GetTypeData(Info).DynUnitName;
-        URIMap[Index].URI := 'urn:' + AppURI +  UnitName;
-      end
-      else if Info.Kind = tkEnumeration then
-      begin
-        UnitName := GetEnumUnitName(Info);
-        URIMap[Index].URI := 'urn:' + AppURI +  UnitName;
-      end
-      else if Info.Kind = tkClass then
-        URIMap[Index].URI := 'urn:' + AppURI + GetTypeData(Info).UnitName
-      else
-        URIMap[Index].URI := 'urn:' + AppURI;
+      UnitName := GetTypeData(Info).DynUnitName;
     end
-    else
-      URIMap[Index].URI := URI;
+    else if Info.Kind = tkEnumeration then
+    begin
+      UnitName := GetEnumUnitName(Info);
+    end;
     if Name <> '' then
       URIMap[Index].Name := Name
     else
@@ -2577,13 +2309,13 @@ begin
   end;
 end;
 
-procedure TRemotableTypeRegistry.RegisterHolderClsMember(ClsTypeInfo: PTypeInfo; const URI: WideString = ''; const Name: WideString = ''; const ExtName: WideString = '');
+procedure TRemotableTypeRegistry.RegisterHolderClsMember(ClsTypeInfo: PTypeInfo; const Name: WideString = ''; const ExtName: WideString = '');
 var
   MemberInfo: PTypeInfo;
 begin
   MemberInfo := GetClsMemberTypeInfo(ClsTypeInfo);
   if MemberInfo <> nil then
-    RegisterXSInfo(MemberInfo, URI, Name, ExtName);
+    RegisterXSInfo(MemberInfo, Name, ExtName);
 end;
 
 procedure TRemotableTypeRegistry.DeleteEntryFromURIMap(Info: PTypeInfo);
@@ -2627,26 +2359,6 @@ begin
       if URIMap[I].ClassType = AClass then
       begin
         Result := URIMap[I].IsScalar;
-        break;
-      end;
-    end;
-  finally
-    UnLock;
-  end;
-end;
-
-function TRemotableTypeRegistry.ClassOptions(AClass: TClass): TObjMultiOptions;
-var
-  I: Integer;
-begin
-  Result := ocDefault;
-  Lock;
-  try
-    for I := 0 to Length(URIMap) - 1 do
-    begin
-      if URIMap[I].ClassType = AClass then
-      begin
-        Result := URIMap[I].MultiRefOpt;
         break;
       end;
     end;
@@ -2779,8 +2491,7 @@ begin
   end;
 end;
 
-function TRemotableTypeRegistry.URIToInfo(const URI,
-  Name: WideString): PTypeInfo;
+function TRemotableTypeRegistry.URIToInfo(const Name: WideString): PTypeInfo;
 var
   I: Integer;
 begin
@@ -2789,7 +2500,7 @@ begin
   try
     for I := 0 to Length(URIMap) - 1 do
     begin
-      if (URIMap[I].URI = URI) and (URIMap[I].Name = Name) then
+      if URIMap[I].Name = Name then
       begin
         Result := URIMap[I].Info;
         break;
@@ -2800,22 +2511,22 @@ begin
   end;
 end;
 
-procedure TRemotableTypeRegistry.GetXSDInfoForClass(Info: PTypeInfo; var URI, TypeName: WideString);
+procedure TRemotableTypeRegistry.GetXSDInfoForClass(Info: PTypeInfo; var TypeName: WideString);
 var
   AClass: TClass;
 begin
   AClass := GetTypeData(Info).ClassType;
-  ClassToURI(AClass, URI, TypeName);
+  ClassToURI(AClass, TypeName);
 end;
 
 function TRemotableTypeRegistry.GetRegisteredClassForBuiltInXSD(const TypeName: WideString): TClass;
 var
   IsScalar: Boolean;
 begin
-  Result := RemClassRegistry.URIToClass(XMLSchemaNameSpace, TypeName, IsScalar);
+  Result := RemClassRegistry.URIToClass(TypeName, IsScalar);
 end;
 
-function  TRemotableTypeRegistry.GetSimpleBuiltInXSDType(const URI, TypeName: WideString): PTypeInfo;
+function  TRemotableTypeRegistry.GetSimpleBuiltInXSDType(const TypeName: WideString): PTypeInfo;
 var
   I: Integer;
 begin
@@ -2824,7 +2535,7 @@ begin
   try
     for I := 0 to Length(URIMap) -1 do
     begin
-      if (URIMap[I].URI = URI) and (URIMap[I].Name = TypeName) then
+      if URIMap[I].Name = TypeName then
       begin
         Result := URIMap[I].Info;
         break;
@@ -2832,57 +2543,6 @@ begin
     end;
   finally
     UnLock;
-  end;
-end;
-
-function TRemotableTypeRegistry.XSDToTypeInfo(const URI, TypeName: WideString): PTypeInfo;
-var
-  AClass, BuiltinClass: TClass;
-  IsScalar: Boolean;
-  I: Integer;
-
-  function IsBase64TypeName(TypeName: InvString): Boolean;
-  var
-    J: Integer;
-  begin
-    Result := False;
-    for J := Low(XMLBase64Types) to High(XMLBase64Types) do
-      if TypeName = XMLBase64Types[J] then
-      begin
-        Result := True;
-        break;
-      end;
-  end;
-begin
-  Result := nil;
-  if URI = XMLSchemaNameSpace then
-  begin
-    { First check if a registered class overrides default mapping }
-    BuiltinClass := GetRegisteredClassForBuiltInXSD(TypeName);
-    if BuiltinClass <> nil then
-      Result := BuiltinClass.ClassInfo;
-    { If not, check default mapping }
-    if Result = nil then
-      Result := GetSimpleBuiltInXSDType(URI, TypeName);
-      if (Result = nil) and IsBase64TypeName(TypeName) then
-        for I := Low(XMLBase64Types) to High(XMLBase64Types) do
-        begin
-          Result := GetSimpleBuiltInXSDType(URI, XMLBase64Types[I]);
-          if Result <> nil then
-            break;
-        end;
-  end else
-  begin
-    AClass := RemClassRegistry.URIToClass(URI, TypeName, IsScalar);
-    if AClass <> nil then
-    begin
-      Result := AClass.ClassInfo;
-      Exit;
-    end;
-    if AClass = nil then
-    begin
-      Result := RemClassRegistry.URIToInfo(URI, TypeName);
-    end;
   end;
 end;
 
@@ -2904,18 +2564,7 @@ begin
     varCurrency:
       Result := TypeInfo(System.Double);
     varDate:
-      begin
-        Result := RemClassRegistry.URIToInfo(XMLSchemaNameSpace, 'dateTime'); { do not localize }
-        if Result = nil then
-        begin
-          for I := Low(XMLSchemaNamepspaces) to High(XMLSchemaNamepspaces) do
-          begin
-            Result := RemClassRegistry.URIToInfo(XMLSchemaNamepspaces[I], 'dateTime');
-            if Result <> nil then
-              break;
-          end;
-        end;
-      end;
+      Result := RemClassRegistry.URIToInfo('dateTime'); { do not localize }
     varOleStr:
       Result := TypeInfo(System.WideString);
     varDispatch:
@@ -2945,29 +2594,6 @@ begin
   end;
 end;
 
-function TRemotableTypeRegistry.GetVarTypeFromXSD(const URI,
-  TypeName: InvString): TVarType;
-var
-  Info: PTypeInfo;
-begin
-  Result := varUnknown;
-  Info := XSDToTypeInfo(URI, TypeName);
-  case Info.Kind of
-    tkInteger:
-      Result := varInteger;
-    tkFloat:
-      Result := varDouble;
-    tkInt64:
-      Result := varInt64;
-    tkChar,
-    tkWChar,
-    tkWString,
-    tkString,
-    tkLString:
-      Result := varOleStr;
-  end;
-end;
-
 function TRemotableClassRegistry.GetEntry(Info: PTypeInfo; var Found: Boolean; const Name: WideString): Integer;
 begin
   Result := FindEntry(Info, Found, Name);
@@ -2993,14 +2619,14 @@ begin
   end;
 end;
 
-function TRemotableTypeRegistry.URIToClass(const URI, Name: WideString): TClass;
+function TRemotableTypeRegistry.URIToClass(const Name: WideString): TClass;
 var
   IsScalar: Boolean;
 begin
-  Result := URIToClass(URI, Name, IsScalar);
+  Result := URIToClass(Name, IsScalar);
 end;
 
-function TRemotableTypeRegistry.URIToClass(const URI, Name: WideString; var IsScalar: Boolean): TClass;
+function TRemotableTypeRegistry.URIToClass(const Name: WideString; var IsScalar: Boolean): TClass;
 var
   I: Integer;
 begin
@@ -3009,7 +2635,7 @@ begin
   try
     for I := 0 to Length(URIMap) - 1 do
     begin
-      if (URIMap[I].URI = URI) and (URIMap[I].Name = Name) then
+      if URIMap[I].Name = Name then
       begin
         Result := URIMap[I].ClassType;
         IsScalar := URIMap[I].IsScalar;
@@ -3021,7 +2647,7 @@ begin
   end;
 end;
 
-function TRemotableClassRegistry.InfoToURI(Info: PTypeInfo; var URI,
+function TRemotableClassRegistry.InfoToURI(Info: PTypeInfo; var
   Name: WideString; var IsScalar: Boolean; tryToRegister: Boolean): Boolean;
 var
   I: Integer;
@@ -3036,7 +2662,6 @@ begin
       begin
         if (URIMap[I].Info = Info) then
         begin
-          URI := URIMap[I].URI;
           Name :=  URIMap[I].Name;
           IsScalar := URIMap[I].IsScalar;
           Result := True;
@@ -3050,7 +2675,6 @@ begin
         begin
           if SameTypeInfo(URIMap[I].Info, Info) then
           begin
-            URI := URIMap[I].URI;
             Name :=  URIMap[I].Name;
             IsScalar := URIMap[I].IsScalar;
             Result := True;
@@ -3065,18 +2689,18 @@ begin
   if (Result = false) and (FAutoRegister) and (tryToRegister) then
   begin
     RegisterXSInfo(Info);
-    Result := InfoToURI(Info, URI, Name, IsScalar, False);
+    Result := InfoToURI(Info, Name, IsScalar, False);
   end;
 end;
 
-function TRemotableTypeRegistry.ClassToURI(AClass: TClass; var URI,  Name: WideString): Boolean;
+function TRemotableTypeRegistry.ClassToURI(AClass: TClass; var Name: WideString): Boolean;
 var
   IsScalar: Boolean;
 begin
-  Result := ClassToURI(AClass, URI, Name, IsScalar);
+  Result := ClassToURI(AClass, Name, IsScalar);
 end;
 
-function TRemotableTypeRegistry.ClassToURI(AClass: TClass; var URI,
+function TRemotableTypeRegistry.ClassToURI(AClass: TClass; var
   Name: WideString; var IsScalar: Boolean; tryToRegister: Boolean): Boolean;
 var
   I: Integer;
@@ -3087,7 +2711,6 @@ begin
     for I := 0 to Length(URIMap)- 1 do
       if URIMap[I].ClassType = AClass  then
       begin
-        URI := URIMap[I].URI;
         if URIMap[I].ExtName <> '' then
           Name := URIMap[I].ExtName
         else
@@ -3102,19 +2725,19 @@ begin
   if (Result = False) and (FAutoRegister) and (tryToRegister) then
   begin
     RegisterXSClass(AClass);
-    Result := ClassToURI(AClass, URI, Name, IsScalar, False);
+    Result := ClassToURI(AClass, Name, IsScalar, False);
   end;
 end;
 
-function TRemotableClassRegistry.TypeInfoToXSD(Info: PTypeInfo; var URI,
+function TRemotableClassRegistry.TypeInfoToXSD(Info: PTypeInfo; var
   TypeName: WideString): Boolean;
 var
   IsScalar: Boolean;
 begin
   if Info.Kind = tkClass then
-    Result := ClassToURI(GetTypeData(Info).ClassType, URI, TypeName, IsScalar)
+    Result := ClassToURI(GetTypeData(Info).ClassType, TypeName, IsScalar)
   else
-    Result := InfoToURI(Info, URI, TypeName, IsScalar);
+    Result := InfoToURI(Info, TypeName, IsScalar);
 end;
 
 { ERemotableException }
@@ -3478,17 +3101,17 @@ begin
   RemClassRegistry.RegisterXSInfo(TypeInfo(TWideStringDynArray), SBorlandTypeNamespace);
 
   { NOTE: TSOAPAttachment is flagged as never Multiref'ed - very important!! }
-  RemClassRegistry.RegisterXSClass(TSOAPAttachment, XMLSchemaNamespace, 'base64Binary', '', False, ocNoMultiRef);
-  RemClassRegistry.RegisterXSClass(TSOAPAttachment, SBorlandTypeNamespace, 'TSOAPAttachment', '', False, ocNoMultiRef);
+  RemClassRegistry.RegisterXSClass(TSOAPAttachment, 'base64Binary', '', False);
+  RemClassRegistry.RegisterXSClass(TSOAPAttachment, 'TSOAPAttachment', '', False);
 end;
 
 procedure InitMoreBuiltIns;
 begin
   { DO NOT LOCALIZE }
-  RemClassRegistry.RegisterXSInfo(TypeInfo(System.TDateTime), XMLSchemaNameSpace, 'dateTime');
-  RemClassRegistry.RegisterXSInfo(TypeInfo(System.ByteBool), XMLSchemaNameSpace, 'boolean');
-  RemClassRegistry.RegisterXSInfo(TypeInfo(System.WordBool), XMLSchemaNameSpace, 'boolean');
-  RemClassRegistry.RegisterXSInfo(TypeInfo(System.LongBool), XMLSchemaNameSpace, 'boolean');
+  RemClassRegistry.RegisterXSInfo(TypeInfo(System.TDateTime), 'dateTime');
+  RemClassRegistry.RegisterXSInfo(TypeInfo(System.ByteBool), 'boolean');
+  RemClassRegistry.RegisterXSInfo(TypeInfo(System.WordBool), 'boolean');
+  RemClassRegistry.RegisterXSInfo(TypeInfo(System.LongBool), 'boolean');
 end;
 
 procedure InitIR;

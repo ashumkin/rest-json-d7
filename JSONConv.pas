@@ -7,7 +7,7 @@
 {                                                       }
 {*******************************************************}
 
-unit SOAPDomConv;
+unit JSONConv;
 
 interface
 
@@ -30,7 +30,7 @@ type
 
   TDOMHeaderProcessorArray = array of TDOMHeaderProcessorEntry;
 
-  TSOAPDOMProcessor = class(TComponent, IInterface)
+  TJSONProcessor = class(TComponent, IInterface)
   private
     FRefCount: Integer;
     FOwnerIsComponent: Boolean;
@@ -51,22 +51,22 @@ type
 
 implementation
 
-uses Variants, SysUtils, SOAPConst, InvokeRegistry, {$IFDEF MSWINDOWS}Windows{$ENDIF}{$IFDEF LINUX}Libc{$ENDIF};
+uses Variants, SysUtils, RESTJSONConst, InvokeRegistry, {$IFDEF MSWINDOWS}Windows{$ENDIF}{$IFDEF LINUX}Libc{$ENDIF};
 
-{ TSOAPDOMProcessor }
+{ TJSONProcessor }
 
-destructor TSOAPDOMProcessor.Destroy;
+destructor TJSONProcessor.Destroy;
 begin
   inherited;
 end;
 
-class function TSOAPDOMProcessor.NewInstance: TObject;
+class function TJSONProcessor.NewInstance: TObject;
 begin
   Result := inherited NewInstance;
-  TSOAPDOMProcessor(Result).FRefCount := 1;
+  TJSONProcessor(Result).FRefCount := 1;
 end;
 
-procedure TSOAPDOMProcessor.AfterConstruction;
+procedure TJSONProcessor.AfterConstruction;
 begin
   inherited;
   FOwnerIsComponent := Assigned(Owner) and (Owner is TComponent);
@@ -75,12 +75,12 @@ end;
 
 { IInterface }
 
-function TSOAPDOMProcessor._AddRef: Integer;
+function TJSONProcessor._AddRef: Integer;
 begin
   Result := InterlockedIncrement(FRefCount)
 end;
 
-function TSOAPDOMProcessor._Release: Integer;
+function TJSONProcessor._Release: Integer;
 begin
   Result := InterlockedDecrement(FRefCount);
   { If we are not being used as a TComponent, then use refcount to manage our
@@ -89,7 +89,7 @@ begin
     Destroy;
 end;
 
-procedure TSOAPDOMProcessor.AddHeaderProcessor(Namespace, HeaderName, TypeName: WideString;
+procedure TJSONProcessor.AddHeaderProcessor(Namespace, HeaderName, TypeName: WideString;
   Processor: IDOMHeaderProcessor);
 var
   I: Integer;
@@ -102,21 +102,12 @@ begin
   FHeaderProcessors[I].Processor := Processor;
 end;
 
-procedure TSOAPDOMProcessor.DefaultProcessHeader(HeaderNode: IXMLNode;
+procedure TJSONProcessor.DefaultProcessHeader(HeaderNode: IXMLNode;
   var Handled, AbortRequest: Boolean);
-var
-  V: Variant;
 begin
-  V := HeaderNode.Attributes[SHeaderMustUnderstand];
-  if not VarIsNull(V) then
-  begin
-    if (V = '1') or SameText(V, 'true') then
-      raise ERemotableException.Create(Format(SHeaderAttributeError, [ExtractLocalName(HeaderNode.NodeName)]),
-                                       SFaultCodeMustUnderstand);
-  end;
 end;
 
-function TSOAPDOMProcessor.FindHeaderProcessor(Namespace, HeaderName,
+function TJSONProcessor.FindHeaderProcessor(Namespace, HeaderName,
   TypeName: WideString): IDOMHeaderProcessor;
 var
   I: Integer;
@@ -134,7 +125,7 @@ begin
   end;
 end;
 
-function TSOAPDOMProcessor.MakeHeaderNodes(HeaderNode: IXMLNode): IXMLNode;
+function TJSONProcessor.MakeHeaderNodes(HeaderNode: IXMLNode): IXMLNode;
 var
   I: Integer;
   Node: IXMLNode;

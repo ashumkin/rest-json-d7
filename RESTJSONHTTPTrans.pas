@@ -13,12 +13,12 @@
 //{$DEFINE USE_INDY}
 {$ENDIF}
 
-unit SOAPHTTPTrans;
+unit RESTJSONHTTPTrans;
 
 interface
 
 uses
-  SysUtils, Classes, WebNode, WSDLNode, Types, IntfInfo, WSDLIntf, SOAPAttachIntf,
+  SysUtils, Classes, WebNode, Types, IntfInfo,
 {$IFDEF USE_INDY}
 IdHTTP, IdIOHandlerSocket, IdSSLOpenSSL;
 {$ELSE}
@@ -37,10 +37,7 @@ type
     property StatusCode: Integer read FStatusCode write FStatusCode;
   end;
 
-  SOAPInvokeOptions = (soNoValueForEmptySOAPAction,   { Send "" or absolutely no value for empty SOAPAction }
-                       soIgnoreInvalidCerts,          { Handle Invalid Server Cert and ask HTTP runtime to ignore }
-                       soNoSOAPActionHeader,          { Don't send SOAPAction - use very very carefully!! }
-                       soAutoCheckAccessPointViaUDDI  { if we get a status code 404/405/410 - contact UDDI }
+  SOAPInvokeOptions = (soIgnoreInvalidCerts          { Handle Invalid Server Cert and ask HTTP runtime to ignore }
                        );
   TSOAPInvokeOptions= set of SOAPInvokeOptions;
 
@@ -64,7 +61,6 @@ type
     FConnected: Boolean;
     FURL: string;
     FAgent: string;
-    FBindingType: TWebServiceBindingType;
     FMimeBoundary: string;
     FContentType: string;
     FUserName: string;
@@ -82,22 +78,13 @@ type
     FConnectTimeout: Integer;
     FSendTimeout: Integer;
     FReceiveTimeout: Integer;
-    FWSDLView: TWSDLView;
-    FSoapAction: string;
-    FUseUTF8InHeader: Boolean;
     FInvokeOptions: TSOAPInvokeOptions;
-    FUDDIBindingKey: WideString;
-    FUDDIOperator: String;
     FOnBeforePost: TBeforePostEvent;
     FOnPostingData: TPostingDataEvent;
     FOnReceivingData: TReceivingDataEvent;
     FMaxSinglePostSize: Integer;
 
     procedure SetURL(const Value: string);
-    function  GetSOAPAction: string;
-    procedure SetSOAPAction(const SOAPAction: string);
-    procedure SetWSDLView(const WSDLVIew: TWSDLView);
-    function  GetSOAPActionHeader: string;
     procedure InitURL(const Value: string);
     procedure SetUsername(const NameValue: string);
     procedure SetPassword(const PasswordValue: string);
@@ -115,7 +102,7 @@ type
     function  GetHTTPReqResp: THTTPReqResp;
     procedure CheckContentType;
 {$IFNDEF USE_INDY}
-    procedure Check(Error: Boolean; ShowSOAPAction: Boolean = False);
+    procedure Check(Error: Boolean);
     procedure Connect(Value: Boolean);
     function  Send(const ASrc: TStream): Integer; virtual;
     function  SendGet: Integer; virtual;
@@ -128,29 +115,21 @@ type
     {IWebNode}
     procedure BeforeExecute(const IntfMD: TIntfMetaData;
                             const MethMD: TIntfMethEntry;
-                            MethodIndex: Integer;
-                            AttachHandler: IMimeAttachmentHandler);
-    procedure Execute(const DataMsg: String; Resp: TStream); overload; virtual;
-    procedure Execute(const Request: TStream; Response: TStream); overload; virtual;
-    function  Execute(const Request: TStream): TStream; overload; virtual;
+                            MethodIndex: Integer);
+    procedure Execute(const Request: TStream; Response: TStream); virtual;
     property  URL: string read FURL write SetURL;
-    property  SoapAction: string read GetSOAPAction write SetSOAPAction;
     { Can these be exposed when using Indy too?? }
     property  ConnectTimeout: Integer read FConnectTimeout write FConnectTimeout;
     property  SendTimeout: Integer read FSendTimeout write FSendTimeout;
     property  ReceiveTimeout: Integer read FReceiveTimeout write FReceiveTimeout;
     property  MaxSinglePostSize: Integer read FMaxSinglePostSize write FMaxSinglePostSize;
   published
-    property  WSDLView: TWSDLView read FWSDLView write SetWSDLView;
     property  Agent: string read FAgent write FAgent;
     property  UserName: string read FUserName write SetUserName;
     property  Password: string read FPassword write SetPassword;
     property  Proxy: string read FProxy write SetProxy;
     property  ProxyByPass: string read FProxyByPass write FProxyByPass;
-    property  UseUTF8InHeader: Boolean read FUseUTF8InHeader write FUseUTF8InHeader;
     property  InvokeOptions: TSOAPInvokeOptions read FInvokeOptions write FInvokeOptions;
-    property  UDDIBindingKey: WideString read FUDDIBindingKey write FUDDIBindingKey;
-    property  UDDIOperator: String read FUDDIOperator write FUDDIOperator;
 
     { Events }
     property  OnBeforePost: TBeforePostEvent read FOnBeforePost write FOnBeforePost;
@@ -161,8 +140,8 @@ type
 implementation
 
 
-uses Variants, SOAPConst, XMLDoc, XMLIntf, InvokeRegistry, WSDLItems,
-     SOAPAttach, UDDIHelper,
+uses Variants, RESTJSONConst, XMLDoc, XMLIntf, InvokeRegistry,
+     SOAPAttach,
 {$IFDEF MSWINDOWS}
 Windows,
 {$ENDIF}
@@ -212,8 +191,8 @@ begin
   FInetConnect := nil;
 {$ENDIF}
   FUserSetURL := False;
-  FInvokeOptions := [soIgnoreInvalidCerts, soAutoCheckAccessPointViaUDDI];
-  FAgent := 'Borland SOAP 1.2'; { Do not localize }
+  FInvokeOptions := [soIgnoreInvalidCerts];
+  FAgent := 'KKM Server API Client'; { Do not localize }
   FMaxSinglePostSize := $8000;
 end;
 
@@ -261,7 +240,7 @@ begin
 end;
 
 {$IFNDEF USE_INDY}
-procedure THTTPReqResp.Check(Error: Boolean; ShowSOAPAction: Boolean);
+procedure THTTPReqResp.Check(Error: Boolean);
 var
   ErrCode: Integer;
   S: string;
@@ -275,7 +254,7 @@ begin
     SetLength(S, StrLen(PChar(S)));
     while (Length(S) > 0) and (S[Length(S)] in [#10, #13]) do
       SetLength(S, Length(S) - 1);
-    raise ESOAPHTTPException.CreateFmt('%s - URL:%s - SOAPAction:%s', [S, FURL, SoapAction]);      { Do not localize }
+    raise ESOAPHTTPException.CreateFmt('%s - URL:%s', [S, FURL]);      { Do not localize }
   end;
 end;
 {$ENDIF}
@@ -283,24 +262,6 @@ end;
 function THTTPReqResp.GetHTTPReqResp: THTTPReqResp;
 begin
   Result := Self;
-end;
-
-function THTTPReqResp.GetSOAPAction: string;
-begin
-  if (FSoapAction = '') and not (soNoValueForEmptySOAPAction in FInvokeOptions) then
-    Result := '""'
-  else
-    Result := FSoapAction;
-end;
-
-procedure THTTPReqResp.SetSOAPAction(const SOAPAction: string);
-begin
-  FSoapAction := SOAPAction;
-end;
-
-procedure THTTPReqResp.SetWSDLView(const WSDLVIew: TWSDLView);
-begin
-  FWSDLView := WSDLView;
 end;
 
 procedure THTTPReqResp.SetURL(const Value: string);
@@ -388,39 +349,22 @@ end;
 procedure THTTPReqResp.SetUsername(const NameValue: string);
 begin
   FUserName := NameValue;
-  if Assigned(WSDLView) then
-    WSDLView.UserName := NameValue;
 end;
 
 procedure THTTPReqResp.SetPassword(const PasswordValue: string);
 begin
   FPassword := PasswordValue;
-  if Assigned(WSDLView) then
-    WSDLView.Password := PasswordValue;
 end;
 
 procedure THTTPReqResp.SetProxy(const ProxyValue: string);
 begin
   FProxy := ProxyValue;
-  if Assigned(WSDLView) then
-    WSDLView.Proxy := ProxyValue;
 end;
 
 
 const
   MaxStatusTest = 4096;
   MaxContentType= 256;
-
-function THTTPReqResp.GetSOAPActionHeader: string;
-begin
-  if (SoapAction = '') then
-    Result := SHTTPSoapAction + ':'
-  else if (SoapAction = '""') then
-    Result := SHTTPSoapAction + ': ""'
-  else
-    Result := SHTTPSoapAction + ': ' + '"' + SoapAction + '"';
-end;
-
 
 {$IFNDEF USE_INDY}
 
@@ -565,36 +509,7 @@ begin
     if FReceiveTimeout > 0 then
       Check(InternetSetOption(Request, INTERNET_OPTION_RECEIVE_TIMEOUT, Pointer(@FReceiveTimeout), SizeOf(FReceiveTimeout)));
 
-    { Setup packet based on Content-Type/Binding }
-    if FBindingType = btMIME then
-    begin
-      ContentHeader := Format(ContentHeaderMIME, [FMimeBoundary]);
-      ContentHeader := Format(ContentTypeTemplate, [ContentHeader]);
-      HttpAddRequestHeaders(Request, PChar(MIMEVersion), Length(MIMEVersion), HTTP_ADDREQ_FLAG_ADD);
-
-      { SOAPAction header }
-      { NOTE: It's not really clear whether this should be sent in the case
-              of MIME Binding. Investigate interoperability ?? }
-      if not (soNoSOAPActionHeader in FInvokeOptions) then
-      begin
-        ActionHeader:= GetSOAPActionHeader;
-        HttpAddRequestHeaders(Request, PChar(ActionHeader), Length(ActionHeader), HTTP_ADDREQ_FLAG_ADD);
-      end;
-
-    end else { Assume btSOAP }
-    begin
-      { SOAPAction header }
-      if not (soNoSOAPActionHeader in FInvokeOptions) then
-      begin
-        ActionHeader:= GetSOAPActionHeader;
-        HttpAddRequestHeaders(Request, PChar(ActionHeader), Length(ActionHeader), HTTP_ADDREQ_FLAG_ADD);
-      end;
-
-      if UseUTF8InHeader then
-        ContentHeader := Format(ContentTypeTemplate, [ContentTypeUTF8])
-      else
-        ContentHeader := Format(ContentTypeTemplate, [ContentTypeNoUTF8]);
-    end;
+    ContentHeader := Format(ContentTypeTemplate, [ContentTypeUTF8]);
 
     { Content-Type }
     HttpAddRequestHeaders(Request, PChar(ContentHeader), Length(ContentHeader), HTTP_ADDREQ_FLAG_ADD);
@@ -718,7 +633,7 @@ begin
   try
     Request := HttpOpenRequest(FInetConnect, 'GET', PChar(FURLSite), nil, { Do not localize }
       nil, Pointer(AcceptTypes), Flags, Integer(Self));
-    Check(not Assigned(Request), False);
+    Check(not Assigned(Request));
 
     while True do
     begin
@@ -886,83 +801,18 @@ end;
 { Here the RIO can perform any transports specific setup before call - XML serialization is done }
 procedure THTTPReqResp.BeforeExecute(const IntfMD: TIntfMetaData;
                                      const MethMD: TIntfMethEntry;
-                                     MethodIndex: Integer;
-                                     AttachHandler: IMimeAttachmentHandler);
+                                     MethodIndex: Integer);
 var
   MethName: InvString;
   Binding: InvString;
-  QBinding: IQualifiedName;
 begin
   if FUserSetURL then
   begin
     MethName := InvRegistry.GetMethExternalName(IntfMD.Info, MethMD.Name);
-    FSoapAction := InvRegistry.GetActionURIOfInfo(IntfMD.Info, MethName, MethodIndex);
+//    FSoapAction := InvRegistry.GetActionURIOfInfo(IntfMD.Info, MethName, MethodIndex);
   end
   else
-  begin
-    { User did *NOT* set a URL }
-    if WSDLView <> nil then
-    begin
-    { Make sure WSDL is active }
-      WSDLView.Activate;
-      QBinding := WSDLView.WSDL.GetBindingForServicePort(WSDLView.Service, WSDLView.Port);
-      if QBinding <> nil then
-      begin
-        Binding := QBinding.Name;
-        MethName:= InvRegistry.GetMethExternalName(WSDLView.IntfInfo, WSDLView.Operation);
-        { TODO: Better to Pass in QBinding here to avoid tricky confusion due to lack of namespace }
-        FSoapAction := WSDLView.WSDL.GetSoapAction(Binding, MethName, 0);
-      end;
-      {NOTE: In case we can't get the SOAPAction - see if we have something in the registry }
-      {      It can't hurt:) }
-      if FSoapAction = '' then
-        InvRegistry.GetActionURIOfInfo(IntfMD.Info, MethName, MethodIndex);
-      { Retrieve URL }
-      FURL := WSDLView.WSDL.GetSoapAddressForServicePort(WSDLView.Service, WSDLView.Port);
-      if (FURL = '') then
-        raise ESOAPHTTPException.CreateFmt(sCantGetURL, [WSDLView.Service, WSDLView.Port, WSDLView.WSDL.FileName]);
-      InitURL(FURL);
-    end
-    else
-      raise ESOAPHTTPException.Create(sNoWSDLURL);
-  end;
-
-  { Are we sending attachments?? }
-  if AttachHandler <> nil then
-  begin
-    FBindingType := btMIME;
-    { If yes, ask MIME handler what MIME boundary it's using to build the Multipart
-      packet }
-    FMimeBoundary := AttachHandler.MIMEBoundary;
-
-    { Also customize the MIME packet for transport specific items }
-    if UseUTF8InHeader then
-      AttachHandler.AddSoapHeader(Format(ContentTypeTemplate, [ContentTypeUTF8]))
-    else
-      AttachHandler.AddSoapHeader(Format(ContentTypeTemplate, [ContentTypeNoUTF8]));
-    AttachHandler.AddSoapHeader(GetSOAPActionHeader);
-  end else
-    FBindingType := btSOAP;
-end;
-
-procedure THTTPReqResp.Execute(const DataMsg: String; Resp: TStream);
-var
-  Stream: TMemoryStream;
-begin
-  Stream := TMemoryStream.Create;
-  try
-    Stream.SetSize(Length(DataMsg));
-    Stream.Write(DataMsg[1], Length(DataMsg));
-    Execute(Stream, Resp);
-  finally
-    Stream.Free;
-  end;
-end;
-
-function THTTPReqResp.Execute(const Request: TStream): TStream;
-begin
-  Result := TMemoryStream.Create;
-  Execute(Request, Result);
+    raise ESOAPHTTPException.Create(sNoWSDLURL);
 end;
 
 procedure THTTPReqResp.CheckContentType;
@@ -978,16 +828,6 @@ begin
 end;
 
 procedure THTTPReqResp.Execute(const Request: TStream; Response: TStream);
-
-  function IsErrorStatusCode(Code: Integer): Boolean;
-  begin
-    case Code of
-      404, 405, 410:
-        Result := True;
-      else
-        Result := False;
-    end;
-  end;
 
 {$IFDEF USE_INDY}
   procedure PostData(const Request: TStream; Response: TStream);
@@ -1015,53 +855,19 @@ var
 var
   Context: Integer;
 {$ENDIF}
-  CanRetry: Boolean;
-  LookUpUDDI: Boolean;
-  AccessPoint: String;
-  PrevError: String;
 begin
-  LookUpUDDI := False;
-  CanRetry := (soAutoCheckAccessPointViaUDDI in FInvokeOptions) and
-              (Length(FUDDIBindingKey) > 0) and
-              (Length(FUDDIOperator) > 0);
 {$IFDEF USE_INDY}
   PostData(Request, Response);
 {$ELSE}
   while (True) do
   begin
-    { Look up URL from UDDI?? }
-    if LookUpUDDI and CanRetry then
-    begin
-      try
-        CanRetry := False;
-        AccessPoint := '';
-        AccessPoint := GetBindingkeyAccessPoint(FUDDIOperator, FUDDIBindingKey);
-      except
-        { Ignore UDDI lookup error }
-      end;
-      { If UDDI lookup failed or we got back the same URL we used...
-        raise the previous execption message }
-      if (AccessPoint = '') or SameText(AccessPoint, FURL) then
-        raise ESOAPHTTPException.Create(PrevError);
-      SetURL(AccessPoint);
-    end;
-
     Context := Send(Request);
     try
       try
         Receive(Context, Response);
         Exit;
       except
-        on Ex: ESOAPHTTPException do
-        begin
-          Connect(False);
-          if not CanRetry or not IsErrorStatusCode(Ex.StatusCode) then
-            raise;
-          { Trigger UDDI Lookup }
-          LookUpUDDI := True;
-          PrevError := Ex.Message;
-        end;
-        else
+        on E: Exception do
         begin
           Connect(False);
           raise;

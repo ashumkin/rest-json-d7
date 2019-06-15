@@ -43,7 +43,7 @@ var
 
 implementation
 
-uses Variants, SOAPConst, EncdDecd, Types, Math, XSBuiltIns;
+uses Variants, RESTJSONConst, EncdDecd, Types, Math, XSBuiltIns;
 
 
 constructor TTypeTranslator.Create;

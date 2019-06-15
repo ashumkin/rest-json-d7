@@ -16,7 +16,7 @@ uses Classes, SysUtils, xmldom, XMLDoc, XMLIntf, OPConvert;
 type
   TSoapEnvelope = class
   public
-    function MakeEnvelope(Doc: IXMLDocument; Options: TSOAPConvertOptions): IXMLNode;
+    function MakeEnvelope(Doc: IXMLDocument; Options: TJSONConvertOptions): IXMLNode;
     function MakeHeader(ParentNode: IXMLNode): IXMLNode;
     function MakeBody(ParentNode: IXMLNOde): IXMLNode;
     function MakeFault(ParentNode: IXMLNOde): IXMLNode;
@@ -24,33 +24,27 @@ type
 
 implementation
 
-uses  SOAPConst;
+uses  RESTJSONConst;
 
-function TSoapEnvelope.MakeEnvelope(Doc: IXMLDocument; Options: TSOAPConvertOptions): IXMLNode;
+function TSoapEnvelope.MakeEnvelope(Doc: IXMLDocument; Options: TJSONConvertOptions): IXMLNode;
 begin
-  Result := Doc.CreateNode(SSoapNameSpacePre + ':' + SSoapEnvelope);
-  Result.DeclareNamespace(SSoapNameSpacePre, SSoapNameSpace);
+  Result := Doc.CreateNode(SSoapEnvelope);
   Result.DeclareNamespace(SXMLSchemaNameSpacePre, XMLSchemaNameSpace);
   Result.DeclareNamespace(SXMLSchemaInstNameSpace99Pre, XMLSchemaInstNameSpace);
-  if not (soDocument in Options) then
-    Result.DeclareNamespace(SSoapEncodingPre, SSoap11EncodingS5);
   Doc.DocumentElement := Result;
 end;
 
 
 function TSoapEnvelope.MakeBody(ParentNode: IXMLNode): IXMLNode;
 begin
-   Result := ParentNode.AddChild(SSoapNameSpacePre + ':' + SSoapBody, SSoapNameSpace);
 end;
 
 function TSoapEnvelope.MakeHeader(ParentNode: IXMLNode): IXMLNode;
 begin
-  Result := ParentNode.AddChild(SSoapNameSpacePre + ':' + SSoapHeader, SSoapNameSpace);
 end;
 
 function TSoapEnvelope.MakeFault(ParentNode: IXMLNode): IXMLNode;
 begin
-   Result := ParentNode.AddChild(SSoapNameSpacePre + ':' + SSoapFault, SSoapNameSpace);
 end;
 
 end.

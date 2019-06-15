@@ -1,0 +1,6 @@
+[submodule "test/dUnitEx"]
+	path = test/dUnitEx
+	url = https://github.com/ashumkin/dUnitEx
+[submodule "test/dUnit"]
+	path = test/dUnit
+	url = https://github.com/ashumkin/dUnit

@@ -52,7 +52,7 @@ function GetDefaultStreamLoader: IStreamLoader;
 
 implementation
 
-uses SysUtils, SOAPHTTPTrans;
+uses SysUtils, RESTJSONHTTPTrans;
 
 type
 

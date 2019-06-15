@@ -11,7 +11,7 @@ unit XSBuiltIns;
 
 interface
 
-uses SysUtils, InvokeRegistry, Classes, FMTBcd, Types, XmlIntf;
+uses SysUtils, InvokeRegistry, Classes, FMTBcd, Types;
 
 const
   SHexMarker               = '$';      { do not localize }
@@ -258,7 +258,7 @@ procedure InitXSTypes;
 
 implementation
 
-uses SOAPConst, {$IFDEF MSWINDOWS}Windows{$ENDIF}{$IFDEF LINUX}Libc{$ENDIF},
+uses RESTJSONConst, {$IFDEF MSWINDOWS}Windows{$ENDIF}{$IFDEF LINUX}Libc{$ENDIF},
      DateUtils;
 
 type
@@ -2432,20 +2432,20 @@ type
 
 procedure InitXSTypes;
 begin
-  RemClassRegistry.RegisterXSClass(TXSDateTime, XMLSchemaNameSpace, 'dateTime', '',True);
+  RemClassRegistry.RegisterXSClass(TXSDateTime, 'dateTime', '',True);
   { timeInstant is not really TXDateTime due to different lexical format }
-  RemClassRegistry.RegisterXSClass(TXSTimeInstant, XMLSchemaNameSpace, 'timeInstant', '', True);
-  RemClassRegistry.RegisterXSClass(TXSTime, XMLSchemaNameSpace, 'time', '', True);
-  RemClassRegistry.RegisterXSClass(TXSDate, XMLSchemaNameSpace, 'date', '', True);
-  RemClassRegistry.RegisterXSClass(TXSDuration, XMLSchemaNameSpace, 'duration', '', True);
-  RemClassRegistry.RegisterXSClass(TXSDuration, XMLSchemaNameSpace, 'timeDuration', '', True);
-  RemClassRegistry.RegisterXSClass(TXSHexBinary, XMLSchemaNamespace, 'hexBinary', '', True);
-  RemClassRegistry.RegisterXSClass(TXSDecimal, XMLSchemaNamespace, 'decimal', '', True);
+  RemClassRegistry.RegisterXSClass(TXSTimeInstant, 'timeInstant', '', True);
+  RemClassRegistry.RegisterXSClass(TXSTime, 'time', '', True);
+  RemClassRegistry.RegisterXSClass(TXSDate, 'date', '', True);
+  RemClassRegistry.RegisterXSClass(TXSDuration, 'duration', '', True);
+  RemClassRegistry.RegisterXSClass(TXSDuration, 'timeDuration', '', True);
+  RemClassRegistry.RegisterXSClass(TXSHexBinary, 'hexBinary', '', True);
+  RemClassRegistry.RegisterXSClass(TXSDecimal, 'decimal', '', True);
 
-  RemClassRegistry.RegisterXSClass(TXSDecimal, XMLSchemaNamespace, 'negativeInteger', '', True);
-  RemClassRegistry.RegisterXSClass(TXSDecimal, XMLSchemaNamespace, 'nonNegativeInteger', '', True);
-  RemClassRegistry.RegisterXSClass(TXSDecimal, XMLSchemaNamespace, 'nonPositiveInteger', '', True);
-  RemClassRegistry.RegisterXSClass(TXSDecimal, XMLSchemaNamespace, 'positiveInteger', '', True);
+  RemClassRegistry.RegisterXSClass(TXSDecimal, 'negativeInteger', '', True);
+  RemClassRegistry.RegisterXSClass(TXSDecimal, 'nonNegativeInteger', '', True);
+  RemClassRegistry.RegisterXSClass(TXSDecimal, 'nonPositiveInteger', '', True);
+  RemClassRegistry.RegisterXSClass(TXSDecimal, 'positiveInteger', '', True);
 end;
 
 end.

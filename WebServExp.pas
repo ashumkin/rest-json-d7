@@ -163,7 +163,7 @@ function IsBaseClassTypeInfo(const ATypeInfo: PTypeInfo): Boolean;
 begin
   Result := (ATypeInfo = TypeInfo(TObject)) or
             (ATypeInfo = TypeInfo(TRemotable)) or
-            (ATypeInfo = TypeInfo(TSOAPHeader)) or
+            (ATypeInfo = TypeInfo(TJSONHeader)) or
             (ATypeInfo = TypeInfo(ERemotableException));
 end;
 

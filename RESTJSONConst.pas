@@ -7,7 +7,7 @@
 {                                                       }
 {*******************************************************}
 
-unit SOAPConst; 
+unit RESTJSONConst; 
 
 interface
 
@@ -38,18 +38,13 @@ const
   ContentHeaderMime = SMultiPartRelated + '; boundary=%s';     { Do not localize }
   SStart = '; start="<%s>"';                                   { Do not localize}
   SBorlandSoapStart = 'http://www.borland.com/rootpart.xml';   { Do not localize}
-  SAttachmentIdPrefix = 'cid:';                                { Do not localize }
 
   MimeVersion = 'MIME-Version: 1.0';
   sTextHtml = 'text/html';                                 { Do not localize }
-  sTextXML  = 'text/xml';                                  { Do not localize }
 
-  ContentTypeUTF8 = 'text/xml; charset="utf-8"';           { Do not localize }
-  ContentTypeNoUTF8 = 'text/xml';                          { Do not localize }
+  ContentTypeUTF8 = 'application/json; charset="utf-8"';           { Do not localize }
 
-  SSoapNameSpace = 'http://schemas.xmlsoap.org/soap/envelope/'; { do not localize}
   SXMLNS = 'xmlns';                                        { do not localize}
-  SSoapEncodingAttr = 'encodingStyle';                     { do not localize}
   SSoap11EncodingS5 = 'http://schemas.xmlsoap.org/soap/encoding/';  { do not localize}
 
   SSoapEncodingArray = 'Array';                            { do not localize}
@@ -79,8 +74,6 @@ const
 
   SHTTPSoapAction = 'SOAPAction';                          { do not localize}
 
-  SHeaderMustUnderstand = 'mustUnderstand';                { do not localize}
-  SHeaderActor = 'actor';                                  { do not localize}
   SActorNext= 'http://schemas.xmlsoap.org/soap/actor/next';{ do not localize}
 
   SSoapType = 'type';                                      { do not localize}
@@ -89,7 +82,6 @@ const
   SDefaultResultName = 'result';                           { do not localize}
 
   SXMLID = 'id';                                           { do not localize}
-  SXMLHREF = 'href';                                       { do not localize}
 
   SSoapNULL = 'NULL';                                      { do not localize}
   SSoapNIL  = 'nil';                                       { do not localize}
@@ -113,7 +105,6 @@ const
     'String', 'Set', 'Class', 'Method', 'WChar', 'LString', 'WString',        { do not localize }
     'Variant', 'Array', 'Record', 'Interface', 'Int64', 'DynArray');          { do not localize }
 
-  SSoapNameSpacePre = 'SOAP-ENV';            { do not localize }
   SXMLSchemaNameSpacePre = 'xsd';            { do not localize}
   SXMLSchemaInstNameSpace99Pre = 'xsi';      { do not localize}
   SSoapEncodingPre = 'SOAP-ENC';             { do not localize}
@@ -212,7 +203,7 @@ resourcestring
 
   SUnsupportedEncodingSyle = 'Unsupported SOAP encodingStyle %s';
   SInvalidSoapRequest = 'Invalid SOAP request';
-  SInvalidSoapResponse = 'Invalid SOAP response';
+  SInvalidCommandResponse = 'Invalid command response';
   SMultiBodyNotSupported = 'Multiple body elements not supported';
   SUnsupportedCC = 'Unsupported calling convention: %s';
   SUnsupportedCCIntfMeth = 'Remote Method Call: unsupported calling convention %s for method %s on interface %s';
@@ -247,7 +238,7 @@ resourcestring
 
   SNoInterfaceGUID = 'Class %s does not implement interface GUID %s';
   SNoArrayElemRTTI = 'Element of Array type %s has no RTTI';
-  SInvalidResponse = 'Invalid SOAP Response';
+  SInvalidResponse = 'Invalid response';
   SInvalidArraySpec = 'Invalid SOAP array specification';
   SCannotFindNodeID = 'Cannot find node referenced by ID %s';
   SNoNativeNULL = 'Option not set to allow Native type to be set to NULL';
@@ -262,7 +253,7 @@ resourcestring
   SVarErrorNotSupported = 'varError type not supported';
   SVarVariantNotSupported = 'varVariant type not supported';
   SHeaderError = 'Error Processing Header (%s)%s';
-  SMissingSoapReturn = 'SOAP Response Packet: result element expected, received "%s"';
+  SMissingJSONReturn = 'JSON Response Packet: no result';
   SInvalidPointer = 'Invalid Pointer';
   SNoMessageConverter = 'No Native to Message converter set';
   SNoMsgProcessingNode = 'No Message processing node set';
@@ -365,6 +356,7 @@ resourcestring
 
   SCantLoadLocation = 'Unable to load WSDL File/Location: %s.  Error [%s]';
 
+  rsJSONErrorClass = 'RESTJSON_Error_Class';
 implementation
 
 end.

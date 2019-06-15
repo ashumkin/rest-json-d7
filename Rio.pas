@@ -9,19 +9,9 @@
 
 unit Rio;
 
-{$IFDEF NO_SOAP_RUNTIME}
-{ If SOAP components are not packaged }
-(*$HPPEMIT '#pragma link "dclsoap.lib"' *)
-{$ENDIF}
-
-{ RIO is currently implemented with WININET }
-(*$HPPEMIT '#if defined(__WIN32__)'     *)
-(*$HPPEMIT '#pragma link "wininet.lib"' *)
-(*$HPPEMIT '#endif'                     *)
-
 interface
 
-uses Classes, IntfInfo, OPConvert, InvokeRegistry, WebNode, SOAPAttachIntf, WSDLIntf;
+uses Classes, IntfInfo, OPConvert, InvokeRegistry, WebNode;
 
 const
   StubSize = 19;    { Max size of call stubs in the generated vtables }
@@ -67,15 +57,13 @@ type
     CallStubIdx: Integer;
 
     { Headers }
-    FSOAPHeaders: TSOAPHeaders;
+    FJSONHeaders: TJSONHeaders;
     FHeadersOutBound: THeaderList;
     FHeadersInbound: THeaderList;
 
     FContext: TInvContext;
     FOnAfterExecute: TAfterExecuteEvent;
     FOnBeforeExecute: TBeforeExecuteEvent;
-    FOnSendAttachment: TOnSendAttachmentEvent;
-    FOnGetAttachment: TOnGetAttachmentEvent;
 
     function  Generic(CallID: Integer; Params: Pointer): Int64;
     procedure GenericStub;
@@ -112,7 +100,7 @@ type
     { Routines that derived RIOs may override }
     procedure DoAfterExecute(const MethodName: string; Response: TStream); virtual;
     procedure DoBeforeExecute(const MethodName: string; Request: TStream); virtual;
-    function  GetResponseStream(BindingType: TWebServiceBindingType): TStream; virtual;
+    function  GetResponseStream: TStream; virtual;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -122,18 +110,16 @@ type
     property RefCount: Integer read FRefCount;
     property Converter: IOPConvert read FConverter write FConverter;
     property WebNode: IWebNode read FWebNode write FWebNode;
-    property SOAPHeaders: TSOAPHeaders read FSOAPHeaders;
+    property JSONHeaders: TJSONHeaders read FJSONHeaders;
   published
     property OnAfterExecute: TAfterExecuteEvent read FOnAfterExecute write FOnAfterExecute;
     property OnBeforeExecute: TBeforeExecuteEvent read FOnBeforeExecute write FOnBeforeExecute;
-    property OnSendAttachment: TOnSendAttachmentEvent read FOnSendAttachment write FOnSendAttachment;
-    property OnGetAttachment: TOnGetAttachmentEvent read FOnGetAttachment write FOnGetAttachment;
   end;
 
 implementation
 
 uses {$IFDEF MSWINDOWS}Windows{$ENDIF}{$IFDEF LINUX}Libc{$ENDIF},
-  SysUtils, XMLDoc, SOAPConst, InvRules, TypInfo, XMLIntf, WebServExp,
+  SysUtils, XMLDoc, RESTJSONConst, InvRules, TypInfo,
   SOAPAttach;
 
 
@@ -452,7 +438,7 @@ begin
   FContext := TInvContext.Create;
 
   { Headers }
-  FSOAPHeaders := TSOAPHeaders.Create(Self);
+  FJSONHeaders := TJSONHeaders.Create(Self);
   FHeadersInbound := THeaderList.Create;
   FHeadersOutBound:= THeaderList.Create;
   { We don't own sent objects - just like we don't own
@@ -460,7 +446,7 @@ begin
     We will take ownership of headers received (returned by
     Service) unless Client removes them }
   FHeadersOutbound.OwnsObjects := False;
-  (FSOAPHeaders as IHeadersSetter).SetHeadersInOut(FHeadersInbound, FHeadersOutBound);
+  (FJSONHeaders as IHeadersSetter).SetHeadersInOut(FHeadersInbound, FHeadersOutBound);
 end;
 
 destructor TRIO.Destroy;
@@ -471,7 +457,7 @@ begin
     FreeMem(IntfStubs);
   if FContext <> nil then
     FContext.Free;
-  FSOAPHeaders.Free;    
+  FJSONHeaders.Free;    
   FHeadersInbound.Free;
   FHeadersOutBound.Free;
   inherited;
@@ -542,7 +528,7 @@ begin
   { Access to RIO interfaces }
   if IsEqualGUID(IID, IInterface) or
      IsEqualGUID(IID, IRIOAccess) or
-     IsEqualGUID(IID, ISOAPHeaders) then
+     IsEqualGUID(IID, IJSONHeaders) then
   begin
     Result := Self.QueryInterface(IID, Obj);
     Exit;
@@ -554,7 +540,7 @@ begin
     Result := Self.QueryInterface(IID, Obj);
     Exit;
   end;
-      
+
   Result := E_NOINTERFACE;
 end;
 
@@ -571,10 +557,10 @@ begin
     Exit;
   end;
 
-  { ISOAPHeaders }
-  if IsEqualGUID(IID, ISOAPHeaders) then
+  { IJSONHeaders }
+  if IsEqualGUID(IID, IJSONHeaders) then
   begin
-    if FSOAPHeaders.GetInterface(IID, Obj) then
+    if FJSONHeaders.GetInterface(IID, Obj) then
       Result := 0;
     Exit;
   end;
@@ -603,16 +589,8 @@ begin
   if (Result = 0) and (FConverter <> nil) then
   begin
     { Encode or passing document-style? }
-    if ioDocument in InvRegistry.GetIntfInvokeOptions(IID) then
-      FConverter.Options := FConverter.Options + [soDocument]
-    else
-      FConverter.Options := FConverter.Options - [soDocument];
-
-    { And did we unwind or do we have literal parameters? }
-    if ioLiteral in InvRegistry.GetIntfInvokeOptions(IID) then
-      FConverter.Options := FConverter.Options + [soLiteralParams]
-    else
-      FConverter.Options := FConverter.Options - [soLiteralParams];
+    if ioPretty in InvRegistry.GetIntfInvokeOptions(IID) then
+      FConverter.Options := FConverter.Options + [soPretty]
   end;
 end;
 
@@ -700,14 +678,6 @@ asm
         FILD    QWORD PTR [EAX]
 end;
 
-function XMLDocFromStream(const Stream: TStream): IXMLDocument;
-begin
-  Result := NewXMLDocument;
-  Result.Encoding := SUTF8;
-  Stream.Position := 0;
-  Result.LoadFromStream(Stream);
-end;
-
 {$DEFINE ATTACHMENT_SUPPORT}
 
 function TRIO.Generic(CallID: Integer; Params: Pointer): Int64;
@@ -717,10 +687,8 @@ var
   ParamIdx, I, J, LeftRightOrder: Integer;
   RetP: Pointer;
   MethNum: Integer;
-  Req, Resp, RespXML: TStream;
+  Req, Resp, RespJSON: TStream;
   XMLStream: TMemoryStream;
-  AttachHandler: IMimeAttachmentHandler;
-  BindingType, RespBindingType: TWebServiceBindingType;
   AttachHeader: String;
 begin
   Result := Int64(0);
@@ -822,122 +790,36 @@ begin
   { Convert parameter to XML packet }
   Req := FConverter.InvContextToMsg(IntfMD, MethNum, FContext, FHeadersOutBound);
   try
-{$IFDEF ATTACHMENT_SUPPORT}
-    { Get the Binding Type
-      NOTE: We're interested in the input/call }
-    BindingType := GetBindingType(MethMD, True);
+    { NOTE: Skip 3 for AddRef,Release & QI }
+    FWebNode.BeforeExecute(IntfMD, MethMD, MethNum-3);
 
-    { NOTE: Creation of AttachHandler could be delayed - doesn't
-            seem to matter much though }
-    AttachHandler := GetMimeAttachmentHandler(BindingType);
-    AttachHandler.OnGetAttachment := OnGetAttachment;
-    AttachHandler.OnSendAttachment := OnSendAttachment;
-{$ELSE}
-    BindingType := btSOAP;
-{$ENDIF}
+    { Allow event to see packet we're sending }
+    { This allows the handler to see the whole packet - i.e. attachments too }
+    DoBeforeExecute(MethMD.Name, Req);
+
+    Resp := GetResponseStream;
     try
-{$IFDEF ATTACHMENT_SUPPORT}
-      { Create MIME stream if we're MIME bound }
-      if (BindingType = btMIME) then
-      begin
-        { Create a MIME stream from the request and attachments }
-        AttachHandler.CreateMimeStream(Req, FConverter.Attachments);
-
-        { Set the MIME Boundary
-          Investigate: Since one of the weaknesses of MIME is the boundary,
-          it seems that we should be going the other way.
-          IOW, since the programmer can configure IWebNode's MIMEBoundary,
-          we should be using that to initialize the AttachHandler's MIME Boundary.
-          IOW, allow the programmer to customize the boundary... instead of
-          ignoring whatever value the programmer may have put there at design time
-          and hardcoding the MIMEBoundary.
-
-          Or maybe that property should not be exposed at the Designer Level  ????  }
-        FWebNode.MimeBoundary := AttachHandler.MIMEBoundary;
-
-        { Allow for transport-specific initialization that needs to take
-          place prior to execution - NOTE: It's important to call this
-          routine before calling FinalizeStream - this allows the attachment's
-          stream to be modified/configured }
-        { NOTE: Skip 3 for AddRef,Release & QI }
-        FWebNode.BeforeExecute(IntfMD, MethMD, MethNum-3, AttachHandler);
-
-        { This is a hack - but for now, LinkedRIO requires that FinalizeStream
-          be called from here - doing so, breaks HTTPRIO - so we resort to a
-          hack. Ideally, I'm thinking of exposing a thin AttachHeader interface
-          that the transport can use to set SOAP headers - allowing each transport
-          to perform any packet customization }
-        if AttachHeader <> '' then
-          AttachHandler.AddSoapHeader(AttachHeader);
-        AttachHandler.FinalizeStream;
-      end else
-{$ENDIF}
-        { NOTE: Skip 3 for AddRef,Release & QI }
-        FWebNode.BeforeExecute(IntfMD, MethMD, MethNum-3, nil);
-
-      { Allow event to see packet we're sending }
-      { This allows the handler to see the whole packet - i.e. attachments too }
-{$IFDEF ATTACHMENT_SUPPORT}
-      if BindingType = btMIME then
-        DoBeforeExecute(MethMD.Name, AttachHandler.GetMIMEStream)
-      else
-{$ENDIF}
-        DoBeforeExecute(MethMD.Name, Req);
-
-{$IFDEF ATTACHMENT_SUPPORT}
-      RespBindingType := GetBindingType(MethMD, False);
-{$ELSE}
-      RespBindingType := btSOAP;
-{$ENDIF}
-      Resp := GetResponseStream(RespBindingType);
       try
-{$IFDEF ATTACHMENT_SUPPORT}
-        if (BindingType = btMIME) then
-        begin
-          try
-            FWebNode.Execute(AttachHandler.GetMIMEStream, Resp)
-          finally
-            FConverter.Attachments.Clear;
-            FHeadersOutBound.Clear;
-          end;
-        end
-        else
-{$ENDIF}
-        try
-          FWebNode.Execute(Req, Resp);
-        finally
-          { Clear Outbound headers }
-          FHeadersOutBound.Clear;
-        end;          
-
-        { Assume the response is the SOAP Envelope in XML format. NOTE: In case
-          of attachments, this could actually be a Multipart/Related response }
-        RespXML := Resp;
-
-        XMLStream := TMemoryStream.Create;
-        try
-          { This allows the handler to see the whole packet - i.e. attachments too }
-          DoAfterExecute(MethMD.Name, Resp);
-
-{$IFDEF ATTACHMENT_SUPPORT}
-          { If we're expecting MIME parts, process 'em }
-          if FWebNode.MimeBoundary <> '' then
-          begin
-            AttachHandler.ProcessMultiPartForm(Resp, XMLStream, FWebNode.MimeBoundary, Nil,
-                                               FConverter.Attachments, FConverter.TempDir);
-            { Now point RespXML to Envelope }
-            RespXML := XMLStream;
-          end;
-{$ENDIF}
-          FConverter.ProcessResponse(RespXML, IntfMD, MethMD, FContext, FHeadersInbound);
-        finally
-          XMLStream.Free;
-        end;
+        FWebNode.Execute(Req, Resp);
       finally
-        Resp.Free;
+        { Clear Outbound headers }
+        FHeadersOutBound.Clear;
+      end;          
+
+      { Assume the response is the SOAP Envelope in XML format. NOTE: In case
+        of attachments, this could actually be a Multipart/Related response }
+      RespJSON := Resp;
+
+      XMLStream := TMemoryStream.Create;
+      try
+        { This allows the handler to see the whole packet - i.e. attachments too }
+        DoAfterExecute(MethMD.Name, Resp);
+        FConverter.ProcessResponse(RespJSON, IntfMD, MethMD, FContext, FHeadersInbound);
+      finally
+        XMLStream.Free;
       end;
     finally
-      FConverter.Attachments.Clear;
+      Resp.Free;
     end;
   finally
     Req.Free;
@@ -972,13 +854,9 @@ begin
   raise Exception.Create(SMethNoRTTI);
 end;
 
-function TRIO.GetResponseStream(BindingType: TWebServiceBindingType): TStream;
+function TRIO.GetResponseStream: TStream;
 begin
-  if (BindingType in [btMime, btDime]) and
-     (soCacheMimeResponse in FConverter.Options) then
-    Result := TTempFileStream.Create
-  else
-    Result := TMemoryStream.Create;
+  Result := TMemoryStream.Create;
 end;
 
 procedure TRIO.DoBeforeExecute(const MethodName: string; Request: TStream);
