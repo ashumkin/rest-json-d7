@@ -560,7 +560,7 @@ begin
 
             RetVal := InternetErrorDlg(GetDesktopWindow(), Request, GetLastError,
               FLAGS_ERROR_UI_FILTER_FOR_ERRORS or FLAGS_ERROR_UI_FLAGS_CHANGE_OPTIONS or
-              FLAGS_ERROR_UI_FLAGS_GENERATE_DATA, P);
+              FLAGS_ERROR_UI_FLAGS_GENERATE_DATA or FLAGS_ERROR_UI_FLAGS_NO_UI, P);
             case RetVal of
               ERROR_SUCCESS: ;
               ERROR_CANCELLED: SysUtils.Abort;
@@ -587,7 +587,7 @@ begin
           Check(not HttpSendRequest(Request, nil, 0, @StrStr.DataString[1], Length(StrStr.DataString)));
           RetVal := InternetErrorDlg(GetDesktopWindow(), Request, GetLastError,
             FLAGS_ERROR_UI_FILTER_FOR_ERRORS or FLAGS_ERROR_UI_FLAGS_CHANGE_OPTIONS or
-            FLAGS_ERROR_UI_FLAGS_GENERATE_DATA, P);
+            FLAGS_ERROR_UI_FLAGS_GENERATE_DATA or FLAGS_ERROR_UI_FLAGS_NO_UI, P);
           case RetVal of
             ERROR_SUCCESS: break;
             ERROR_CANCELLED: SysUtils.Abort;
@@ -653,7 +653,8 @@ begin
           RetVal := InternetErrorDlg(GetDesktopWindow(), Request, LastError,
                                      FLAGS_ERROR_UI_FILTER_FOR_ERRORS or
                                      FLAGS_ERROR_UI_FLAGS_CHANGE_OPTIONS or
-                                     FLAGS_ERROR_UI_FLAGS_GENERATE_DATA, P);
+                                     FLAGS_ERROR_UI_FLAGS_GENERATE_DATA or
+                                     FLAGS_ERROR_UI_FLAGS_NO_UI, P);
           case RetVal of
             ERROR_CANCELLED: SysUtils.Abort;
             ERROR_SUCCESS: break;
